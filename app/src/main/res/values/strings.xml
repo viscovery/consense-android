@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Player</string>
+    <string name="video_url" formatted="false"><![CDATA[http://viscovery-vsp-dev.s3.amazonaws.com/sdkdemo/Videos/sillicon%20valley%20S1%20trailer.mp4]]></string>
+</resources>
