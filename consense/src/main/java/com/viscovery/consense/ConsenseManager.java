@@ -1,10 +1,15 @@
 package com.viscovery.consense;
 
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.util.Base64;
 import android.util.Log;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
 
 import com.google.ads.interactivemedia.v3.api.AdDisplayContainer;
 import com.google.ads.interactivemedia.v3.api.AdsLoader;
@@ -20,18 +25,39 @@ import com.google.ads.interactivemedia.v3.api.AdsRequest;
 import com.google.ads.interactivemedia.v3.api.ImaSdkFactory;
 import com.google.ads.interactivemedia.v3.api.player.ContentProgressProvider;
 import com.google.ads.interactivemedia.v3.api.player.VideoProgressUpdate;
+import com.squareup.picasso.Picasso;
+import com.viscovery.consense.api.VmapResponse;
+import com.viscovery.consense.api.VspService;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Scanner;
 
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
+
 public class ConsenseManager implements
-        AdErrorListener, AdsLoadedListener, AdEventListener, ContentProgressProvider {
+        AdErrorListener,
+        AdEventListener,
+        AdsLoadedListener,
+        ContentProgressProvider,
+        View.OnClickListener {
     public interface ConsensePlayer {
         void setVideoPath(String path);
         void pause();
@@ -40,31 +66,22 @@ public class ConsenseManager implements
         int getDuration();
     }
 
-    private class DownloadAsyncTask extends AsyncTask<String, Void, String> {
-        private static final String URL_FORMAT =
-                "https://vsp.viscovery.com/api/vmap?api_key=%s&video_url=%s&platform=mobile";
+    private class VastAsyncTask extends AsyncTask<String, Void, String> {
+        private String mTimeOffset;
+
+        VastAsyncTask(String timeOffset) {
+            mTimeOffset = timeOffset;
+        }
 
         @Override
         protected String doInBackground(String... params) {
-            final byte[] data = params[0].getBytes();
-            final String encoded = Base64.encodeToString(data, Base64.DEFAULT);
-            final String url = String.format(URL_FORMAT, mApiKey, encoded);
+            final String url = params[0];
             Log.d(TAG, url);
             try {
                 final HttpURLConnection connection =
                         (HttpURLConnection) new URL(url).openConnection();
                 final int code = connection.getResponseCode();
                 if (code != HttpURLConnection.HTTP_OK) {
-                    switch (code) {
-                        case HttpURLConnection.HTTP_UNAUTHORIZED:
-                            Log.e(TAG, "Unauthorized");
-                            break;
-                        case HttpURLConnection.HTTP_NO_CONTENT:
-                            Log.e(TAG, "Not found");
-                            break;
-                        default:
-                            break;
-                    }
                     return null;
                 }
 
@@ -83,35 +100,50 @@ public class ConsenseManager implements
                 return;
             }
 
-            Log.d(TAG, result);
             try {
-                final JSONObject object = new JSONObject(result);
-                mContent = object.getString("context");
-                if (mStarted) {
-                    requestAds();
+                final NonLinear nonLinear = VastParser.parse(result);
+                if (nonLinear != null) {
+                    final Calendar calendar = Calendar.getInstance(Locale.US);
+                    final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
+                            "HH:mm:ss.SSS", Locale.US);
+                    calendar.setTime(simpleDateFormat.parse(mTimeOffset));
+                    final int hour = calendar.get(Calendar.HOUR_OF_DAY);
+                    final int minute = calendar.get(Calendar.MINUTE);
+                    final int second = calendar.get(Calendar.SECOND);
+                    final int millisecond = calendar.get(Calendar.MILLISECOND);
+                    final double key = hour * 3600 + minute * 60 + second + millisecond / 1000.0;
+                    mNonLinears.put(key, nonLinear);
                 }
-            } catch (JSONException e) {
-                final String message = e.getMessage();
-                Log.e(TAG, message);
+            } catch (IOException|ParseException|XmlPullParserException e) {
             }
         }
     }
 
     private static final String TAG = "ConsenseManager";
 
+    private final Context mContext;
     private final ConsensePlayer mPlayer;
     private final String mApiKey;
     private final ImaSdkFactory mSdkFactory;
     private final AdsLoader mAdsLoader;
     private final AdDisplayContainer mAdDisplayContainer;
+    private final RelativeLayout mContainerLayout;
+    private final ImageView mAdView;
+    private final ImageView mCloseView;
+    private final VspService mVspService;
 
     private boolean mStarted;
     private String mContent;
     private AdsManager mAdsManager;
     private boolean mActive;
+    private HashMap<Double, NonLinear> mNonLinears = new HashMap<>();
+    private String mClickThroughUrl;
+    private String mClickTrackingUrl;
+    private Picasso mPicasso;
 
     public ConsenseManager(
             Context context, ViewGroup container, ConsensePlayer player, String apiKey) {
+        mContext = context;
         mPlayer = player;
         mApiKey = apiKey;
         mSdkFactory = ImaSdkFactory.getInstance();
@@ -120,6 +152,28 @@ public class ConsenseManager implements
         mAdsLoader.addAdsLoadedListener(this);
         mAdDisplayContainer = mSdkFactory.createAdDisplayContainer();
         mAdDisplayContainer.setAdContainer(container);
+
+        mContainerLayout = new RelativeLayout(context);
+        final ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        container.addView(mContainerLayout, layoutParams);
+
+        mAdView = new ImageView(context);
+        mAdView.setId(R.id.ad);
+        mAdView.setAdjustViewBounds(true);
+        mAdView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        mAdView.setOnClickListener(this);
+        mCloseView = new ImageView(context);
+        mCloseView.setId(R.id.close);
+        mCloseView.setImageResource(R.drawable.btn_close);
+        mCloseView.setOnClickListener(this);
+
+        mPicasso = Picasso.with(context);
+        final Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl("https://vsp.viscovery.com/")
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+        mVspService = retrofit.create(VspService.class);
     }
 
     public void setVideoPath(String path) {
@@ -127,7 +181,38 @@ public class ConsenseManager implements
             mPlayer.setVideoPath(path);
         }
 
-        new DownloadAsyncTask().execute(path);
+        final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
+        final Call<VmapResponse> call = mVspService.getVmap(mApiKey, videoUrl);
+        call.enqueue(new Callback<VmapResponse>() {
+            @Override
+            public void onResponse(Call<VmapResponse> call, Response<VmapResponse> response) {
+                final VmapResponse vmapResponse = response.body();
+                if (vmapResponse != null) {
+                    mContent = vmapResponse.getContent();
+                    try {
+                        final List<AdBreak> adBreaks = VmapParser.parse(mContent);
+                        for (AdBreak adBreak : adBreaks) {
+                            final String timeOffset = adBreak.getTimeOffset();
+                            final String breakType = adBreak.getBreakType();
+                            final String url = adBreak.getAdSource().getAdTagUri().getUrl();
+                            if (breakType.equals(AdBreak.BREAK_TYPE_NONLINEAR)) {
+                                Log.d(TAG, url);
+                                new VastAsyncTask(timeOffset).execute(url);
+                            }
+                        }
+                    } catch (IOException|XmlPullParserException e) {
+                        Log.e(TAG, e.getMessage());
+                    }
+                    if (mStarted) {
+                        requestAds();
+                    }
+                }
+            }
+
+            @Override
+            public void onFailure(Call<VmapResponse> call, Throwable t) {
+            }
+        });
     }
 
     public void start() {
@@ -161,14 +246,6 @@ public class ConsenseManager implements
     }
 
     @Override
-    public void onAdsManagerLoaded(AdsManagerLoadedEvent event) {
-        mAdsManager = event.getAdsManager();
-        mAdsManager.addAdErrorListener(this);
-        mAdsManager.addAdEventListener(this);
-        mAdsManager.init();
-    }
-
-    @Override
     public void onAdEvent(AdEvent event) {
         final AdEventType type = event.getType();
         Log.d(TAG, type.toString());
@@ -178,7 +255,57 @@ public class ConsenseManager implements
                 break;
             case LOADED:
                 Log.d(TAG, event.getAd().toString());
-                mAdsManager.start();
+                closeAd();
+                final double key = event.getAd().getAdPodInfo().getTimeOffset();
+                if (mNonLinears.containsKey(key)) {
+                    final NonLinear nonLinear = mNonLinears.get(key);
+                    final Map<String, String> parameters = parseParameters(
+                            nonLinear.getAdParameters());
+
+                    final int layoutWidth = mContainerLayout.getWidth();
+                    final int layoutHeight = mContainerLayout.getHeight();
+                    final int nonLinearWidth = nonLinear.getWidth();
+                    final int nonLinearHeight = nonLinear.getHeight();
+                    final int heightPercentage = Integer.parseInt(parameters.get("height"));
+                    final int bottomPercentage = Integer.parseInt(parameters.get("pos_value"));
+                    final int height = layoutHeight * heightPercentage / 100;
+                    final int width = height * nonLinearWidth / nonLinearHeight;
+
+                    final RelativeLayout.LayoutParams adLayoutParams =
+                            new RelativeLayout.LayoutParams(width, height);
+                    adLayoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+                    int left = 0;
+                    int bottom = layoutHeight * bottomPercentage / 100;
+                    if (parameters.get("align").equals("center")) {
+                        adLayoutParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
+                    } else {
+                        adLayoutParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+                        final int leftPercentage = Integer.parseInt(parameters.get("align_value"));
+                        left = layoutWidth * leftPercentage / 100;
+                    }
+                    adLayoutParams.setMargins(left, 0, 0, bottom);
+                    mContainerLayout.addView(mAdView, adLayoutParams);
+
+                    final RelativeLayout.LayoutParams closeLayoutParams =
+                            new RelativeLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT);
+                    closeLayoutParams.setMargins(
+                            0,
+                            mContext.getResources().getDimensionPixelSize(R.dimen.btn_offset_vertical),
+                            mContext.getResources().getDimensionPixelSize(R.dimen.btn_offset_horizontal),
+                            0);
+                    closeLayoutParams.addRule(RelativeLayout.ALIGN_RIGHT, R.id.ad);
+                    closeLayoutParams.addRule(RelativeLayout.ALIGN_TOP, R.id.ad);
+                    mContainerLayout.addView(mCloseView, closeLayoutParams);
+
+                    mClickThroughUrl = nonLinear.getClickThroughUrl();
+                    mClickTrackingUrl = nonLinear.getClickTrackingUrl();
+                    final String path = nonLinear.getResourceUrl();
+                    mPicasso.load(path).into(mAdView);
+                } else {
+                    mAdsManager.start();
+                }
                 break;
             case CONTENT_PAUSE_REQUESTED:
                 if (mPlayer != null) {
@@ -201,6 +328,14 @@ public class ConsenseManager implements
     }
 
     @Override
+    public void onAdsManagerLoaded(AdsManagerLoadedEvent event) {
+        mAdsManager = event.getAdsManager();
+        mAdsManager.addAdErrorListener(this);
+        mAdsManager.addAdEventListener(this);
+        mAdsManager.init();
+    }
+
+    @Override
     public VideoProgressUpdate getContentProgress() {
         if (mActive || mPlayer == null) {
             return VideoProgressUpdate.VIDEO_TIME_NOT_READY;
@@ -208,6 +343,18 @@ public class ConsenseManager implements
         final int currentPosition = mPlayer.getCurrentPosition();
         final int duration = mPlayer.getDuration();
         return new VideoProgressUpdate(currentPosition, duration);
+    }
+
+    @Override
+    public void onClick(View v) {
+        if (v == mAdView) {
+            final Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(mClickThroughUrl));
+            mContext.startActivity(intent);
+            closeAd();
+        } else if (v == mCloseView) {
+            closeAd();
+        }
     }
 
     private void destroy() {
@@ -228,5 +375,19 @@ public class ConsenseManager implements
         request.setAdDisplayContainer(mAdDisplayContainer);
         request.setContentProgressProvider(this);
         mAdsLoader.requestAds(request);
+    }
+
+    private void closeAd() {
+        mContainerLayout.removeView(mAdView);
+        mContainerLayout.removeView(mCloseView);
+    }
+
+    private Map<String, String> parseParameters(String parameters) {
+        HashMap<String, String> mapping = new HashMap<>();
+        for (final String parameter : parameters.split(",")) {
+            final String[] elements = parameter.split("=");
+            mapping.put(elements[0], elements[1]);
+        }
+        return mapping;
     }
 }
