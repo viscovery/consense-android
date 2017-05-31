@@ -1,4 +1,4 @@
-package com.viscovery.vidsense;
+package com.viscovery.ad;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;

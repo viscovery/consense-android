@@ -1,4 +1,4 @@
-package com.viscovery.vidsense;
+package com.viscovery.ad;
 
 public class AdTagUri {
     public static final String TEMPLATE_TYPE_VAST1 = "vast1";

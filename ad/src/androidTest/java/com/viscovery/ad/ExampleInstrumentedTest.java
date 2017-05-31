@@ -1,4 +1,4 @@
-package com.viscovery.vidsense;
+package com.viscovery.ad;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;

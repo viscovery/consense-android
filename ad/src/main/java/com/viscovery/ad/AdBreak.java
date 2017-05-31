@@ -1,4 +1,4 @@
-package com.viscovery.vidsense;
+package com.viscovery.ad;
 
 public class AdBreak {
     public static final String BREAK_TYPE_LINEAR = "linear";

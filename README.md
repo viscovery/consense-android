@@ -16,7 +16,7 @@ Before you begin, you'll need the following:
 2. Add the following to your settings.gradle:
 
 ```groovy
-include ':app', ':vidsense'
+include ':app', ':ad'
 ```
 
 3. Add the following to your application-level build.gradle file:
@@ -24,7 +24,7 @@ include ':app', ':vidsense'
 ```groovy
 dependencies {
     ...
-    compile project(':vidsense')
+    compile project(':ad')
 }
 ```
 
@@ -34,9 +34,9 @@ dependencies {
 
 ```java
 ...
-import com.viscovery.vidsense.VidsenseManager.VidsensePlayer;
+import com.viscovery.ad.AdSdkManager.AdSdkPlayer;
 
-public class VideoPlayer extends VideoView implements VidsensePlayer {
+public class VideoPlayer extends VideoView implements AdSdkPlayer {
     ...
     @Override
     public void setVideoPath(String path) {
@@ -91,14 +91,14 @@ public class VideoPlayer extends VideoView implements VidsensePlayer {
 
 ```java
 ...
-import com.viscovery.vidsense.VidsenseManager;
+import com.viscovery.ad.AdSdkManager;
 
 public class MainActivity extends AppCompatActivity {
     ...
     private static final String API_KEY = "89494098-2877-38f8-b424-369ab8de602";
 
     ...
-    private VidsenseManager mVidsenseManager;
+    private AdSdkManager mAdSdkManager;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -112,8 +112,8 @@ public class MainActivity extends AppCompatActivity {
         mPlayer = (VideoPlayer) findViewById(R.id.player);
         mPlayer.setMediaController(controller);
         mPlayer.setOnInfoListener(this);
-        mVidsenseManager = new VidsenseManager(this, container, mPlayer, API_KEY);
-        mVidsenseManager.setVideoPath(path);
+        mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY);
+        mAdSdkManager.setVideoPath(path);
     }
 }
 ```
@@ -130,7 +130,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener {
     public boolean onInfo(MediaPlayer mp, int what, int extra) {
         switch (what) {
             case MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
-                mVidsenseManager.start();
+                mAdSdkManager.start();
                 break;
             default:
                 break;
@@ -143,7 +143,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener {
 ## Download and run the sample video player app
 
 1. Download the sample video player app from [GitHub](https://github.com/viscovery/viscovery-ad-sdk-android/).
-2. Start Android Studio and select **Open an existing Android Studio project**, or if Android Studio is already running, select **File > New > Import Project**. Then choose vidsense-android/build.gradle.
+2. Start Android Studio and select **Open an existing Android Studio project**, or if Android Studio is already running, select **File > New > Import Project**. Then choose viscovery-ad-sdk-android/build.gradle.
 3. Run a Gradle sync by selecting **Tools > Android > Sync Project with Gradle Files**.
 4. Ensure that the player app compiles and runs on a physical Android device or an Android Virtual Device using **Run > Run 'app'**. It's normal for the content video to take a few moments to load before playing.
 

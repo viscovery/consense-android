@@ -1,4 +1,4 @@
-package com.viscovery.vidsense;
+package com.viscovery.ad;
 
 import android.content.Context;
 import android.content.Intent;
@@ -26,8 +26,8 @@ import com.google.ads.interactivemedia.v3.api.ImaSdkFactory;
 import com.google.ads.interactivemedia.v3.api.player.ContentProgressProvider;
 import com.google.ads.interactivemedia.v3.api.player.VideoProgressUpdate;
 import com.squareup.picasso.Picasso;
-import com.viscovery.vidsense.api.VmapResponse;
-import com.viscovery.vidsense.api.VspService;
+import com.viscovery.ad.api.VmapResponse;
+import com.viscovery.ad.api.VspService;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -50,13 +50,13 @@ import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
-public class VidsenseManager implements
+public class AdSdkManager implements
         AdErrorListener,
         AdEventListener,
         AdsLoadedListener,
         ContentProgressProvider,
         View.OnClickListener {
-    public interface VidsensePlayer {
+    public interface AdSdkPlayer {
         void setVideoPath(String path);
         void pause();
         void resume();
@@ -117,10 +117,10 @@ public class VidsenseManager implements
         }
     }
 
-    private static final String TAG = "VidsenseManager";
+    private static final String TAG = "AdSdkManager";
 
     private final Context mContext;
-    private final VidsensePlayer mPlayer;
+    private final AdSdkPlayer mPlayer;
     private final String mApiKey;
     private final ImaSdkFactory mSdkFactory;
     private final AdsLoader mAdsLoader;
@@ -139,8 +139,8 @@ public class VidsenseManager implements
     private String mClickTrackingUrl;
     private Picasso mPicasso;
 
-    public VidsenseManager(
-            Context context, ViewGroup container, VidsensePlayer player, String apiKey) {
+    public AdSdkManager(
+            Context context, ViewGroup container, AdSdkPlayer player, String apiKey) {
         mContext = context;
         mPlayer = player;
         mApiKey = apiKey;

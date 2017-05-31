@@ -1,4 +1,4 @@
-package com.viscovery.vidsense.api;
+package com.viscovery.ad.api;
 
 import com.google.gson.annotations.SerializedName;
 

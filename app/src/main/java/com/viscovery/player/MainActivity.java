@@ -9,14 +9,14 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.ViewGroup;
 import android.widget.MediaController;
 
-import com.viscovery.vidsense.VidsenseManager;
+import com.viscovery.ad.AdSdkManager;
 
 public class MainActivity extends AppCompatActivity implements OnInfoListener, OnPreparedListener {
     private static final String API_KEY = "873cbd49-738d-406c-b9bc-e15588567b39";
 
     private VideoPlayer mPlayer;
     private MediaController mController;
-    private VidsenseManager mVidsenseManager;
+    private AdSdkManager mAdSdkManager;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -31,8 +31,8 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         mPlayer.setMediaController(mController);
         mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
-        mVidsenseManager = new VidsenseManager(this, container, mPlayer, API_KEY);
-        mVidsenseManager.setVideoPath(path);
+        mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY);
+        mAdSdkManager.setVideoPath(path);
     }
 
     @Override
@@ -46,7 +46,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
     public boolean onInfo(MediaPlayer mp, int what, int extra) {
         switch (what) {
             case MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
-                mVidsenseManager.start();
+                mAdSdkManager.start();
                 break;
             default:
                 break;

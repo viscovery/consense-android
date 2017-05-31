@@ -4,9 +4,9 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.widget.VideoView;
 
-import com.viscovery.vidsense.VidsenseManager.VidsensePlayer;
+import com.viscovery.ad.AdSdkManager.AdSdkPlayer;
 
-public class VideoPlayer extends VideoView implements VidsensePlayer {
+public class VideoPlayer extends VideoView implements AdSdkPlayer {
     public VideoPlayer(Context context) {
         super(context);
     }

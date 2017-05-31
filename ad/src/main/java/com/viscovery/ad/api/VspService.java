@@ -1,4 +1,4 @@
-package com.viscovery.vidsense.api;
+package com.viscovery.ad.api;
 
 import retrofit2.Call;
 import retrofit2.http.GET;
