@@ -1,4 +1,4 @@
-package com.viscovery.consense;
+package com.viscovery.vidsense;
 
 public class NonLinear {
     private int mWidth;

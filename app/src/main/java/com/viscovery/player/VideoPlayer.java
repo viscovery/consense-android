@@ -4,9 +4,9 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.widget.VideoView;
 
-import com.viscovery.consense.ConsenseManager.ConsensePlayer;
+import com.viscovery.vidsense.VidsenseManager.VidsensePlayer;
 
-public class VideoPlayer extends VideoView implements ConsensePlayer {
+public class VideoPlayer extends VideoView implements VidsensePlayer {
     public VideoPlayer(Context context) {
         super(context);
     }

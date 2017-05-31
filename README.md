@@ -1,6 +1,6 @@
 # Get Started
 
-This guide shows you how to integrate ConSense SDK into your video player app. You can also download the sample video player app from GitHub, and test video ads while playing the app's content video.
+This guide shows you how to integrate VidSense SDK into your video player app. You can also download the sample video player app from GitHub, and test video ads while playing the app's content video.
 
 ## Prerequisites
 
@@ -9,14 +9,14 @@ Before you begin, you'll need the following:
 * Android Studio 1.0+
 * Android 2.3+
 
-## Add ConSense SDK to your video player app
+## Add VidSense SDK to your video player app
 
-1. Copy ConSense SDK to your project folder.
+1. Copy VidSense SDK to your project folder.
 
 2. Add the following to your settings.gradle:
 
 ```groovy
-include ':app', ':consense'
+include ':app', ':vidsense'
 ```
 
 3. Add the following to your application-level build.gradle file:
@@ -24,19 +24,19 @@ include ':app', ':consense'
 ```groovy
 dependencies {
     ...
-    compile project(':consense')
+    compile project(':vidsense')
 }
 ```
 
-## Implement ConSense player interface
+## Implement VidSense player interface
 
 1. Implement interface methods in your video player:
 
 ```java
 ...
-import com.viscovery.consense.ConsenseManager.ConsensePlayer;
+import com.viscovery.vidsense.VidsenseManager.VidsensePlayer;
 
-public class VideoPlayer extends VideoView implements ConsensePlayer {
+public class VideoPlayer extends VideoView implements VidsensePlayer {
     ...
     @Override
     public void setVideoPath(String path) {
@@ -65,9 +65,9 @@ public class VideoPlayer extends VideoView implements ConsensePlayer {
 }
 ```
 
-## Setup ConSense manager
+## Setup VidSense manager
 
-1. Prepare a container view to render ConSense content
+1. Prepare a container view to render VidSense content
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -87,18 +87,18 @@ public class VideoPlayer extends VideoView implements ConsensePlayer {
 </FrameLayout>
 ```
 
-2. Initialize ConSense manager with your API key (sample API key below):
+2. Initialize VidSense manager with your API key (sample API key below):
 
 ```java
 ...
-import com.viscovery.consense.ConsenseManager;
+import com.viscovery.vidsense.VidsenseManager;
 
 public class MainActivity extends AppCompatActivity {
     ...
     private static final String API_KEY = "89494098-2877-38f8-b424-369ab8de602";
 
     ...
-    private ConsenseManager mConsenseManager;
+    private VidsenseManager mVidsenseManager;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -112,13 +112,13 @@ public class MainActivity extends AppCompatActivity {
         mPlayer = (VideoPlayer) findViewById(R.id.player);
         mPlayer.setMediaController(controller);
         mPlayer.setOnInfoListener(this);
-        mConsenseManager = new ConsenseManager(this, container, mPlayer, API_KEY);
-        mConsenseManager.setVideoPath(path);
+        mVidsenseManager = new VidsenseManager(this, container, mPlayer, API_KEY);
+        mVidsenseManager.setVideoPath(path);
     }
 }
 ```
 
-3. Start ConSense manager on video player start:
+3. Start VidSense manager on video player start:
 
 ```java
 ...
@@ -130,7 +130,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener {
     public boolean onInfo(MediaPlayer mp, int what, int extra) {
         switch (what) {
             case MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
-                mConsenseManager.start();
+                mVidsenseManager.start();
                 break;
             default:
                 break;
@@ -142,8 +142,8 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener {
 
 ## Download and run the sample video player app
 
-1. Download the sample video player app from [GitHub](https://github.com/viscovery/consense-android/).
-2. Start Android Studio and select **Open an existing Android Studio project**, or if Android Studio is already running, select **File > New > Import Project**. Then choose consense-android/build.gradle.
+1. Download the sample video player app from [GitHub](https://github.com/viscovery/viscovery-ad-sdk-android/).
+2. Start Android Studio and select **Open an existing Android Studio project**, or if Android Studio is already running, select **File > New > Import Project**. Then choose vidsense-android/build.gradle.
 3. Run a Gradle sync by selecting **Tools > Android > Sync Project with Gradle Files**.
 4. Ensure that the player app compiles and runs on a physical Android device or an Android Virtual Device using **Run > Run 'app'**. It's normal for the content video to take a few moments to load before playing.
 

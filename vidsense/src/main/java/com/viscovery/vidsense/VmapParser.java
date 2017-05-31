@@ -1,6 +1,4 @@
-package com.viscovery.consense;
-
-import android.util.Log;
+package com.viscovery.vidsense;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;

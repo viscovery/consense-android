@@ -1,1 +1,1 @@
-include ':app', ':consense'
+include ':app', ':vidsense'

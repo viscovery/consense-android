@@ -1,4 +1,4 @@
-package com.viscovery.consense;
+package com.viscovery.vidsense;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;

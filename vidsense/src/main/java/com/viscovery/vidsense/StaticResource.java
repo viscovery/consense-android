@@ -1,4 +1,4 @@
-package com.viscovery.consense;
+package com.viscovery.vidsense;
 
 public class StaticResource {
     public static final String CREATIVE_TYPE_GIF = "image/gif";

@@ -9,14 +9,14 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.ViewGroup;
 import android.widget.MediaController;
 
-import com.viscovery.consense.ConsenseManager;
+import com.viscovery.vidsense.VidsenseManager;
 
 public class MainActivity extends AppCompatActivity implements OnInfoListener, OnPreparedListener {
     private static final String API_KEY = "873cbd49-738d-406c-b9bc-e15588567b39";
 
     private VideoPlayer mPlayer;
     private MediaController mController;
-    private ConsenseManager mConsenseManager;
+    private VidsenseManager mVidsenseManager;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -31,8 +31,8 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         mPlayer.setMediaController(mController);
         mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
-        mConsenseManager = new ConsenseManager(this, container, mPlayer, API_KEY);
-        mConsenseManager.setVideoPath(path);
+        mVidsenseManager = new VidsenseManager(this, container, mPlayer, API_KEY);
+        mVidsenseManager.setVideoPath(path);
     }
 
     @Override
@@ -46,7 +46,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
     public boolean onInfo(MediaPlayer mp, int what, int extra) {
         switch (what) {
             case MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
-                mConsenseManager.start();
+                mVidsenseManager.start();
                 break;
             default:
                 break;

@@ -1,4 +1,4 @@
-package com.viscovery.consense;
+package com.viscovery.vidsense;
 
 import android.content.Context;
 import android.content.Intent;
@@ -26,11 +26,9 @@ import com.google.ads.interactivemedia.v3.api.ImaSdkFactory;
 import com.google.ads.interactivemedia.v3.api.player.ContentProgressProvider;
 import com.google.ads.interactivemedia.v3.api.player.VideoProgressUpdate;
 import com.squareup.picasso.Picasso;
-import com.viscovery.consense.api.VmapResponse;
-import com.viscovery.consense.api.VspService;
+import com.viscovery.vidsense.api.VmapResponse;
+import com.viscovery.vidsense.api.VspService;
 
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
@@ -52,13 +50,13 @@ import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
-public class ConsenseManager implements
+public class VidsenseManager implements
         AdErrorListener,
         AdEventListener,
         AdsLoadedListener,
         ContentProgressProvider,
         View.OnClickListener {
-    public interface ConsensePlayer {
+    public interface VidsensePlayer {
         void setVideoPath(String path);
         void pause();
         void resume();
@@ -119,10 +117,10 @@ public class ConsenseManager implements
         }
     }
 
-    private static final String TAG = "ConsenseManager";
+    private static final String TAG = "VidsenseManager";
 
     private final Context mContext;
-    private final ConsensePlayer mPlayer;
+    private final VidsensePlayer mPlayer;
     private final String mApiKey;
     private final ImaSdkFactory mSdkFactory;
     private final AdsLoader mAdsLoader;
@@ -141,8 +139,8 @@ public class ConsenseManager implements
     private String mClickTrackingUrl;
     private Picasso mPicasso;
 
-    public ConsenseManager(
-            Context context, ViewGroup container, ConsensePlayer player, String apiKey) {
+    public VidsenseManager(
+            Context context, ViewGroup container, VidsensePlayer player, String apiKey) {
         mContext = context;
         mPlayer = player;
         mApiKey = apiKey;
