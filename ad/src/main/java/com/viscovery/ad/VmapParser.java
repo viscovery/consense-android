@@ -1,5 +1,8 @@
 package com.viscovery.ad;
 
+import com.viscovery.ad.vmap.Extension;
+import com.viscovery.ad.vmap.OutstreamExtension;
+
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
@@ -16,10 +19,15 @@ public class VmapParser {
     private static final String TAG_AD_BREAK = "AdBreak";
     private static final String TAG_AD_SOURCE = "AdSource";
     private static final String TAG_AD_TAG_URI = "AdTagURI";
+    private static final String TAG_EXTENSIONS = "Extensions";
+    private static final String TAG_EXTENSION = "Extension";
 
     private static final String ATTRIBUTE_TIME_OFFSET = "timeOffset";
     private static final String ATTRIBUTE_BREAK_TYPE = "breakType";
     private static final String ATTRIBUTE_TEMPLATE_TYPE = "templateType";
+    private static final String ATTRIBUTE_TYPE = "type";
+
+    private static final String TYPE_OUTSTREAM = "outstream";
 
     static List<AdBreak> parse(String document) throws IOException, XmlPullParserException {
         final XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
@@ -63,6 +71,19 @@ public class VmapParser {
                                     }
 
                                     adBreak.setAdSource(adSource);
+                                    break;
+                                }
+                                case TAG_EXTENSIONS: {
+                                    ArrayList<Extension> extensions = new ArrayList<>();
+                                    parser.nextTag();
+                                    if (parser.getName().equals(TAG_EXTENSION)) {
+                                        final String type = parser.getAttributeValue(
+                                                null, ATTRIBUTE_TYPE);
+                                        if (type.equals(TYPE_OUTSTREAM)) {
+                                            extensions.add(new OutstreamExtension());
+                                        }
+                                    }
+                                    adBreak.setExtensions(extensions);
                                     break;
                                 }
                                 default: {

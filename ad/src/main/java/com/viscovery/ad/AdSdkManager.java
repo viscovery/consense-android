@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.util.Base64;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -28,6 +29,8 @@ import com.google.ads.interactivemedia.v3.api.player.VideoProgressUpdate;
 import com.squareup.picasso.Picasso;
 import com.viscovery.ad.api.VmapResponse;
 import com.viscovery.ad.api.VspService;
+import com.viscovery.ad.vmap.Extension;
+import com.viscovery.ad.vmap.OutstreamExtension;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -66,9 +69,11 @@ public class AdSdkManager implements
 
     private class VastAsyncTask extends AsyncTask<String, Void, String> {
         private String mTimeOffset;
+        private String mType;
 
-        VastAsyncTask(String timeOffset) {
+        VastAsyncTask(String timeOffset, String type) {
             mTimeOffset = timeOffset;
+            mType = type;
         }
 
         @Override
@@ -101,6 +106,7 @@ public class AdSdkManager implements
             try {
                 final NonLinear nonLinear = VastParser.parse(result);
                 if (nonLinear != null) {
+                    nonLinear.setType(mType);
                     final Calendar calendar = Calendar.getInstance(Locale.US);
                     final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
                             "HH:mm:ss.SSS", Locale.US);
@@ -139,6 +145,9 @@ public class AdSdkManager implements
     private String mClickTrackingUrl;
     private Picasso mPicasso;
 
+    private ImageView mOutstreamView;
+    private ImageView mCloseOutstreamView;
+
     public AdSdkManager(
             Context context, ViewGroup container, AdSdkPlayer player, String apiKey) {
         mContext = context;
@@ -174,6 +183,17 @@ public class AdSdkManager implements
         mVspService = retrofit.create(VspService.class);
     }
 
+    public void setOutstreamContainer(ViewGroup container) {
+        final LayoutInflater inflater = LayoutInflater.from(mContext);
+        final ViewGroup layout = (ViewGroup) inflater.inflate(R.layout.outstream, null);
+        container.addView(layout);
+
+        mOutstreamView = (ImageView) layout.findViewById(R.id.outstream);
+        mOutstreamView.setOnClickListener(this);
+        mCloseOutstreamView = (ImageView) layout.findViewById(R.id.close);
+        mCloseOutstreamView.setOnClickListener(this);
+    }
+
     public void setVideoPath(String path) {
         if (mPlayer != null) {
             mPlayer.setVideoPath(path);
@@ -193,9 +213,16 @@ public class AdSdkManager implements
                             final String timeOffset = adBreak.getTimeOffset();
                             final String breakType = adBreak.getBreakType();
                             final String url = adBreak.getAdSource().getAdTagUri().getUrl();
+                            boolean outstream = false;
+                            for (Extension extension : adBreak.getExtensions()) {
+                                if (extension instanceof OutstreamExtension) {
+                                    outstream = true;
+                                }
+                            }
                             if (breakType.equals(AdBreak.BREAK_TYPE_NONLINEAR)) {
-                                Log.d(TAG, url);
-                                new VastAsyncTask(timeOffset).execute(url);
+                                new VastAsyncTask(timeOffset, outstream
+                                        ? NonLinear.TYPE_OUTSTREAM
+                                        : NonLinear.TYPE_INSTREAM).execute(url);
                             }
                         }
                     } catch (IOException|XmlPullParserException e) {
@@ -257,6 +284,16 @@ public class AdSdkManager implements
                 final double key = event.getAd().getAdPodInfo().getTimeOffset();
                 if (mNonLinears.containsKey(key)) {
                     final NonLinear nonLinear = mNonLinears.get(key);
+                    if (nonLinear.getType().equals(NonLinear.TYPE_OUTSTREAM)) {
+                        if (mOutstreamView != null) {
+                            mClickThroughUrl = nonLinear.getClickThroughUrl();
+                            mClickTrackingUrl = nonLinear.getClickTrackingUrl();
+                            final String path = nonLinear.getResourceUrl();
+                            mPicasso.load(path).into(mOutstreamView);
+                            mCloseOutstreamView.setVisibility(View.VISIBLE);
+                        }
+                        return;
+                    }
                     final Map<String, String> parameters = parseParameters(
                             nonLinear.getAdParameters());
 
@@ -345,12 +382,12 @@ public class AdSdkManager implements
 
     @Override
     public void onClick(View v) {
-        if (v == mAdView) {
+        if (v == mAdView || v == mOutstreamView) {
             final Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setData(Uri.parse(mClickThroughUrl));
             mContext.startActivity(intent);
             closeAd();
-        } else if (v == mCloseView) {
+        } else if (v == mCloseView || v == mCloseOutstreamView) {
             closeAd();
         }
     }
@@ -378,6 +415,10 @@ public class AdSdkManager implements
     private void closeAd() {
         mContainerLayout.removeView(mAdView);
         mContainerLayout.removeView(mCloseView);
+        if (mOutstreamView != null) {
+            mOutstreamView.setImageDrawable(null);
+            mCloseOutstreamView.setVisibility(View.GONE);
+        }
     }
 
     private Map<String, String> parseParameters(String parameters) {

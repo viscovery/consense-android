@@ -25,6 +25,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         setContentView(R.layout.activity_main);
         final String path = getString(R.string.video_url);
         final ViewGroup container = (ViewGroup) findViewById(R.id.container);
+        final ViewGroup outstream = (ViewGroup) findViewById(R.id.outstream);
         mController = new MediaController(this, false);
         mController.setAnchorView(container);
         mPlayer = (VideoPlayer) findViewById(R.id.player);
@@ -32,6 +33,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
         mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY);
+        mAdSdkManager.setOutstreamContainer(outstream);
         mAdSdkManager.setVideoPath(path);
     }
 

@@ -1,5 +1,10 @@
 package com.viscovery.ad;
 
+import com.viscovery.ad.vmap.Extension;
+
+import java.util.ArrayList;
+import java.util.List;
+
 public class AdBreak {
     public static final String BREAK_TYPE_LINEAR = "linear";
     public static final String BREAK_TYPE_NONLINEAR = "nonlinear";
@@ -8,6 +13,7 @@ public class AdBreak {
     private String mTimeOffset;
     private String mBreakType;
     private AdSource mAdSource;
+    private List<Extension> mExtensions;
 
     public AdBreak(String timeOffset, String breakType) {
         mTimeOffset = timeOffset;
@@ -28,5 +34,13 @@ public class AdBreak {
 
     public AdSource getAdSource() {
         return mAdSource;
+    }
+
+    public void setExtensions(List<Extension> extensions) {
+        mExtensions = extensions;
+    }
+
+    public List<Extension> getExtensions() {
+        return mExtensions;
     }
 }

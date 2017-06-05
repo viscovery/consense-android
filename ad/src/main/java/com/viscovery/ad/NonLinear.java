@@ -1,6 +1,9 @@
 package com.viscovery.ad;
 
 public class NonLinear {
+    public static final String TYPE_INSTREAM = "instream";
+    public static final String TYPE_OUTSTREAM = "outstream";
+
     private int mWidth;
     private int mHeight;
     private String mSuggestedDuration;
@@ -8,6 +11,7 @@ public class NonLinear {
     private String mClickThroughUrl;
     private String mClickTrackingUrl;
     private String mAdParameters;
+    private String mType = TYPE_INSTREAM;
 
     public NonLinear(int width, int height, String resourceUrl) {
         mWidth = width;
@@ -57,5 +61,13 @@ public class NonLinear {
 
     public String getAdParameters() {
         return mAdParameters;
+    }
+
+    public void setType(String type) {
+        mType = type;
+    }
+
+    public String getType() {
+        return mType;
     }
 }
