@@ -7,7 +7,7 @@ This guide shows you how to integrate VidSense SDK into your video player app. Y
 Before you begin, you'll need the following:
 
 * Android Studio 1.0+
-* Android 2.3+
+* Android 4.0+
 
 ## Add VidSense SDK to your video player app
 
@@ -71,20 +71,40 @@ public class VideoPlayer extends VideoView implements AdSdkPlayer {
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/container"
-    android:background="@android:color/black"
+    android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.viscovery.player.VideoPlayer
-        android:id="@+id/player"
-        android:layout_gravity="center"
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="wrap_content">
 
-</FrameLayout>
+        <com.viscovery.player.VideoPlayer
+            android:id="@+id/player"
+            android:layout_centerInParent="true"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <FrameLayout
+            android:id="@+id/container"
+            android:layout_alignLeft="@id/player"
+            android:layout_alignTop="@id/player"
+            android:layout_alignRight="@id/player"
+            android:layout_alignBottom="@id/player"
+            android:layout_width="0dp"
+            android:layout_height="0dp" />
+
+    </RelativeLayout>
+
+    <FrameLayout
+        android:id="@+id/outstream"
+        android:background="@android:color/darker_gray"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/outstream_height" />
+
+</LinearLayout>
 ```
 
 2. Initialize VidSense manager with your API key (sample API key below):
@@ -107,12 +127,15 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         final String path = getString(R.string.video_url);
         final ViewGroup container = (ViewGroup) findViewById(R.id.container);
-        final MediaController controller = new MediaController(this, false);
-        controller.setAnchorView(container);
+        final ViewGroup outstream = (ViewGroup) findViewById(R.id.outstream);
+        mController = new MediaController(this, false);
+        mController.setAnchorView(container);
         mPlayer = (VideoPlayer) findViewById(R.id.player);
-        mPlayer.setMediaController(controller);
+        mPlayer.setMediaController(mController);
+        mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
         mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY);
+        mAdSdkManager.setOutstreamContainer(outstream);
         mAdSdkManager.setVideoPath(path);
     }
 }
