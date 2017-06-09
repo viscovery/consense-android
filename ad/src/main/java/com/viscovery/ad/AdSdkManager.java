@@ -3,6 +3,8 @@ package com.viscovery.ad;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.support.constraint.ConstraintLayout;
+import android.support.constraint.Guideline;
 import android.util.Base64;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -104,9 +106,13 @@ public class AdSdkManager implements
     private final ImaSdkFactory mSdkFactory;
     private final AdsLoader mAdsLoader;
     private final AdDisplayContainer mAdDisplayContainer;
-    private final RelativeLayout mContainerLayout;
-    private final ImageView mAdView;
-    private final ImageView mCloseView;
+    private final ViewGroup mInstreamView;
+    private final Guideline mInstreamLeftGuideline;
+    private final Guideline mInstreamTopGuideline;
+    private final Guideline mInstreamRightGuideline;
+    private final Guideline mInstreamBottomGuideline;
+    private final ImageView mInstreamAdView;
+    private final ImageView mInstreamCloseView;
     private final VspService mVspService;
     private final Callback<VmapResponse> mVmapResponseCallback = new Callback<VmapResponse>() {
         @Override
@@ -172,20 +178,17 @@ public class AdSdkManager implements
         mAdDisplayContainer = mSdkFactory.createAdDisplayContainer();
         mAdDisplayContainer.setAdContainer(container);
 
-        mContainerLayout = new RelativeLayout(context);
-        final ViewGroup.LayoutParams layoutParams = new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        container.addView(mContainerLayout, layoutParams);
-
-        mAdView = new ImageView(context);
-        mAdView.setId(R.id.ad);
-        mAdView.setAdjustViewBounds(true);
-        mAdView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        mAdView.setOnClickListener(this);
-        mCloseView = new ImageView(context);
-        mCloseView.setId(R.id.close);
-        mCloseView.setImageResource(R.drawable.btn_close);
-        mCloseView.setOnClickListener(this);
+        final LayoutInflater inflater = LayoutInflater.from(context);
+        inflater.inflate(R.layout.instream, container);
+        mInstreamView = (ViewGroup) container.findViewById(R.id.instream);
+        mInstreamLeftGuideline = (Guideline) mInstreamView.findViewById(R.id.left);
+        mInstreamTopGuideline = (Guideline) mInstreamView.findViewById(R.id.top);
+        mInstreamRightGuideline = (Guideline) mInstreamView.findViewById(R.id.right);
+        mInstreamBottomGuideline = (Guideline) mInstreamView.findViewById(R.id.bottom);
+        mInstreamAdView = (ImageView) mInstreamView.findViewById(R.id.ad);
+        mInstreamAdView.setOnClickListener(this);
+        mInstreamCloseView = (ImageView) mInstreamView.findViewById(R.id.close);
+        mInstreamCloseView.setOnClickListener(this);
 
         final Gson gson = new GsonBuilder()
                 .registerTypeAdapter(Vmap.class, new VmapTypeAdapter())
@@ -288,47 +291,55 @@ public class AdSdkManager implements
                     final Map<String, String> parameters = parseParameters(
                             nonLinear.getAdParameters());
 
-                    final int layoutWidth = mContainerLayout.getWidth();
-                    final int layoutHeight = mContainerLayout.getHeight();
-                    final int nonLinearWidth = nonLinear.getWidth();
-                    final int nonLinearHeight = nonLinear.getHeight();
-                    final int heightPercentage = Integer.parseInt(parameters.get("height"));
-                    final int bottomPercentage = Integer.parseInt(parameters.get("pos_value"));
-                    final int height = layoutHeight * heightPercentage / 100;
-                    final int width = height * nonLinearWidth / nonLinearHeight;
-
-                    final RelativeLayout.LayoutParams adLayoutParams =
-                            new RelativeLayout.LayoutParams(width, height);
-                    adLayoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-                    int left = 0;
-                    int bottom = layoutHeight * bottomPercentage / 100;
-                    if (parameters.get("align").equals("center")) {
-                        adLayoutParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
-                    } else {
-                        adLayoutParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-                        final int leftPercentage = Integer.parseInt(parameters.get("align_value"));
-                        left = layoutWidth * leftPercentage / 100;
+                    int heightPercentage;
+                    try {
+                        heightPercentage = Integer.parseInt(parameters.get("height"));
+                    } catch (NumberFormatException e) {
+                        heightPercentage = 100;
                     }
-                    adLayoutParams.setMargins(left, 0, 0, bottom);
-                    mContainerLayout.addView(mAdView, adLayoutParams);
+                    final int bottomPercentage = Integer.parseInt(parameters.get("pos_value"));
 
-                    final RelativeLayout.LayoutParams closeLayoutParams =
-                            new RelativeLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                                    ViewGroup.LayoutParams.WRAP_CONTENT);
-                    closeLayoutParams.setMargins(
-                            0,
-                            mContext.getResources().getDimensionPixelSize(R.dimen.btn_offset_vertical),
-                            mContext.getResources().getDimensionPixelSize(R.dimen.btn_offset_horizontal),
-                            0);
-                    closeLayoutParams.addRule(RelativeLayout.ALIGN_RIGHT, R.id.ad);
-                    closeLayoutParams.addRule(RelativeLayout.ALIGN_TOP, R.id.ad);
-                    mContainerLayout.addView(mCloseView, closeLayoutParams);
+
+                    final ConstraintLayout.LayoutParams topLayoutParams =
+                            (ConstraintLayout.LayoutParams) mInstreamTopGuideline.getLayoutParams();
+                    topLayoutParams.guidePercent =
+                            (float) ((100 - heightPercentage - bottomPercentage) / 100.0);
+                    mInstreamTopGuideline.setLayoutParams(topLayoutParams);
+
+                    final ConstraintLayout.LayoutParams bottomLayoutParams =
+                            (ConstraintLayout.LayoutParams) mInstreamBottomGuideline.getLayoutParams();
+                    bottomLayoutParams.guidePercent = (float) ((100 - bottomPercentage) / 100.0);
+                    mInstreamBottomGuideline.setLayoutParams(bottomLayoutParams);
+
+                    final ConstraintLayout.LayoutParams leftLayoutParams =
+                            (ConstraintLayout.LayoutParams) mInstreamLeftGuideline.getLayoutParams();
+                    final ConstraintLayout.LayoutParams rightLayoutParams =
+                            (ConstraintLayout.LayoutParams) mInstreamRightGuideline.getLayoutParams();
+                    final ConstraintLayout.LayoutParams adLayoutParams =
+                            (ConstraintLayout.LayoutParams) mInstreamAdView.getLayoutParams();
+                    if (parameters.get("align").equals("center")) {
+                        mInstreamAdView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                        leftLayoutParams.guidePercent = 0;
+                        rightLayoutParams.guidePercent = 1;
+                        adLayoutParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID;
+                        adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID;
+                    } else {
+                        mInstreamAdView.setScaleType(ImageView.ScaleType.FIT_START);
+                        final int leftPercentage = Integer.parseInt(parameters.get("align_value"));
+                        leftLayoutParams.guidePercent = (float) (leftPercentage / 100.0);
+                        rightLayoutParams.guidePercent = 1 - leftLayoutParams.guidePercent;
+                        adLayoutParams.leftToLeft = mInstreamLeftGuideline.getId();
+                        adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.UNSET;
+                    }
+                    mInstreamLeftGuideline.setLayoutParams(leftLayoutParams);
+                    mInstreamRightGuideline.setLayoutParams(rightLayoutParams);
+                    mInstreamAdView.setLayoutParams(adLayoutParams);
 
                     mClickThroughUrl = nonLinear.getNonLinearClickThrough();
                     mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
                     final String path = nonLinear.getStaticResource();
-                    mPicasso.load(path).into(mAdView);
+                    mPicasso.load(path).into(mInstreamAdView);
+                    mInstreamCloseView.setVisibility(View.VISIBLE);
                 } else {
                     mAdsManager.start();
                 }
@@ -373,12 +384,12 @@ public class AdSdkManager implements
 
     @Override
     public void onClick(View v) {
-        if (v == mAdView || v == mOutstreamView) {
+        if (v == mInstreamAdView || v == mOutstreamView) {
             final Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setData(Uri.parse(mClickThroughUrl));
             mContext.startActivity(intent);
             closeAd();
-        } else if (v == mCloseView || v == mCloseOutstreamView) {
+        } else if (v == mInstreamCloseView || v == mCloseOutstreamView) {
             closeAd();
         }
     }
@@ -404,8 +415,8 @@ public class AdSdkManager implements
     }
 
     private void closeAd() {
-        mContainerLayout.removeView(mAdView);
-        mContainerLayout.removeView(mCloseView);
+        mInstreamAdView.setImageDrawable(null);
+        mInstreamCloseView.setVisibility(View.GONE);
         if (mOutstreamView != null) {
             mOutstreamView.setImageDrawable(null);
             mCloseOutstreamView.setVisibility(View.GONE);
