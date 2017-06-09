@@ -1,8 +1,17 @@
 package com.viscovery.ad.vmap;
 
-/**
- * Created by dreamcwli on 2017/6/5.
- */
+import org.simpleframework.xml.Attribute;
+import org.simpleframework.xml.Root;
 
-public abstract class Extension {
+@Root(name = "Extension", strict = false)
+public class Extension {
+    public static final String TYPE_INSTREAM = "instream";
+    public static final String TYPE_OUTSTREAM = "outstream";
+
+    @Attribute(name = "type")
+    private String mType;
+
+    public String getType() {
+        return mType;
+    }
 }

@@ -28,8 +28,14 @@ dependencies {
     compile 'com.android.support:appcompat-v7:25.3.1'
     compile 'com.google.ads.interactivemedia.v3:interactivemedia:3.6.0'
     compile 'com.google.android.gms:play-services-ads:10.2.4'
+    compile 'com.google.code.gson:gson:2.7'
     compile 'com.squareup.picasso:picasso:2.5.2'
     compile 'com.squareup.retrofit2:retrofit:2.3.0'
     compile 'com.squareup.retrofit2:converter-gson:2.3.0'
+    compile ('com.squareup.retrofit2:converter-simplexml:2.3.0') {
+        exclude group: 'stax', module: 'stax'
+        exclude group: 'stax', module: 'stax-api'
+        exclude group: 'xpp3', module: 'xpp3'
+    }
     testCompile 'junit:junit:4.12'
 }

@@ -3,7 +3,6 @@ package com.viscovery.ad;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.util.Base64;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -26,32 +25,35 @@ import com.google.ads.interactivemedia.v3.api.AdsRequest;
 import com.google.ads.interactivemedia.v3.api.ImaSdkFactory;
 import com.google.ads.interactivemedia.v3.api.player.ContentProgressProvider;
 import com.google.ads.interactivemedia.v3.api.player.VideoProgressUpdate;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.squareup.picasso.Picasso;
 import com.viscovery.ad.api.VmapResponse;
 import com.viscovery.ad.api.VspService;
+import com.viscovery.ad.vast.NonLinear;
+import com.viscovery.ad.vast.Vast;
+import com.viscovery.ad.vast.VastService;
 import com.viscovery.ad.vmap.Extension;
-import com.viscovery.ad.vmap.OutstreamExtension;
+import com.viscovery.ad.vmap.AdBreak;
+import com.viscovery.ad.vmap.Vmap;
+import com.viscovery.ad.vmap.VmapTypeAdapter;
 
-import org.xmlpull.v1.XmlPullParserException;
+import org.simpleframework.xml.Serializer;
+import org.simpleframework.xml.core.Persister;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Scanner;
 
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
+import retrofit2.converter.simplexml.SimpleXmlConverterFactory;
 
 public class AdSdkManager implements
         AdErrorListener,
@@ -67,59 +69,30 @@ public class AdSdkManager implements
         int getDuration();
     }
 
-    private class VastAsyncTask extends AsyncTask<String, Void, String> {
-        private String mTimeOffset;
-        private String mType;
+    private class VastCallback implements Callback<Vast> {
+        private AdBreak mAdBreak;
 
-        VastAsyncTask(String timeOffset, String type) {
-            mTimeOffset = timeOffset;
-            mType = type;
+        public VastCallback(AdBreak adBreak) {
+            mAdBreak = adBreak;
         }
 
         @Override
-        protected String doInBackground(String... params) {
-            final String url = params[0];
-            Log.d(TAG, url);
-            try {
-                final HttpURLConnection connection =
-                        (HttpURLConnection) new URL(url).openConnection();
-                final int code = connection.getResponseCode();
-                if (code != HttpURLConnection.HTTP_OK) {
-                    return null;
-                }
-
-                final InputStream stream = connection.getInputStream();
-                return new Scanner(stream).useDelimiter("\\A").next();
-            } catch (IOException e) {
-                final String message = e.getMessage();
-                Log.e(TAG, message);
-                return null;
-            }
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            if (result == null) {
-                return;
-            }
-
-            try {
-                final NonLinear nonLinear = VastParser.parse(result);
+        public void onResponse(Call<Vast> call, Response<Vast> response) {
+            final Vast vast = response.body();
+            if (vast != null) {
+                final NonLinear nonLinear = vast.getAd().getInLine().getNonLinear();
                 if (nonLinear != null) {
-                    nonLinear.setType(mType);
-                    final Calendar calendar = Calendar.getInstance(Locale.US);
-                    final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
-                            "HH:mm:ss.SSS", Locale.US);
-                    calendar.setTime(simpleDateFormat.parse(mTimeOffset));
-                    final int hour = calendar.get(Calendar.HOUR_OF_DAY);
-                    final int minute = calendar.get(Calendar.MINUTE);
-                    final int second = calendar.get(Calendar.SECOND);
-                    final int millisecond = calendar.get(Calendar.MILLISECOND);
-                    final double key = hour * 3600 + minute * 60 + second + millisecond / 1000.0;
-                    mNonLinears.put(key, nonLinear);
+                    try {
+                        final double key = parseTimeOffset(mAdBreak.getTimeOffset());
+                        mNonLinears.put(key, nonLinear);
+                    } catch (ParseException e) {
+                    }
                 }
-            } catch (IOException|ParseException|XmlPullParserException e) {
             }
+        }
+
+        @Override
+        public void onFailure(Call<Vast> call, Throwable t) {
         }
     }
 
@@ -135,11 +108,48 @@ public class AdSdkManager implements
     private final ImageView mAdView;
     private final ImageView mCloseView;
     private final VspService mVspService;
+    private final Callback<VmapResponse> mVmapResponseCallback = new Callback<VmapResponse>() {
+        @Override
+        public void onResponse(Call<VmapResponse> call, Response<VmapResponse> response) {
+            final VmapResponse vmapResponse = response.body();
+            if (vmapResponse != null) {
+                mContent = vmapResponse.getContent();
+                final Serializer serializer = new Persister();
+                try {
+                    final Vmap vmap = serializer.read(Vmap.class, mContent);
+                    for (AdBreak adBreak : vmap.getAdBreaks()) {
+                        try {
+                            final double key = parseTimeOffset(adBreak.getTimeOffset());
+                            mAdBreaks.put(key, adBreak);
+                        } catch (ParseException e) {
+                            continue;
+                        }
+
+                        final Call<Vast> vastCall = mVastService.getDocument(
+                                adBreak.getAdSource().getAdTagUri().getValue());
+                        vastCall.enqueue(new VastCallback(adBreak));
+                    }
+                } catch (Exception e) {
+                }
+
+                if (mStarted) {
+                    requestAds();
+                }
+            }
+        }
+
+        @Override
+        public void onFailure(Call<VmapResponse> call, Throwable t) {
+            Log.d(TAG, "onFailure");
+            Log.d(TAG, t.getMessage());
+        }
+    };
 
     private boolean mStarted;
     private String mContent;
     private AdsManager mAdsManager;
     private boolean mActive;
+    private HashMap<Double, AdBreak> mAdBreaks = new HashMap<>();
     private HashMap<Double, NonLinear> mNonLinears = new HashMap<>();
     private String mClickThroughUrl;
     private String mClickTrackingUrl;
@@ -147,6 +157,8 @@ public class AdSdkManager implements
 
     private ImageView mOutstreamView;
     private ImageView mCloseOutstreamView;
+
+    private VastService mVastService;
 
     public AdSdkManager(
             Context context, ViewGroup container, AdSdkPlayer player, String apiKey) {
@@ -175,12 +187,20 @@ public class AdSdkManager implements
         mCloseView.setImageResource(R.drawable.btn_close);
         mCloseView.setOnClickListener(this);
 
+        final Gson gson = new GsonBuilder()
+                .registerTypeAdapter(Vmap.class, new VmapTypeAdapter())
+                .create();
         mPicasso = Picasso.with(context);
         final Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl("https://vsp.viscovery.com/")
-                .addConverterFactory(GsonConverterFactory.create())
+                .addConverterFactory(GsonConverterFactory.create(gson))
                 .build();
         mVspService = retrofit.create(VspService.class);
+        mVastService = new Retrofit.Builder()
+                .baseUrl("https://vsp.viscovery.com/")
+                .addConverterFactory(SimpleXmlConverterFactory.create())
+                .build()
+                .create(VastService.class);
     }
 
     public void setOutstreamContainer(ViewGroup container) {
@@ -201,43 +221,7 @@ public class AdSdkManager implements
 
         final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
         final Call<VmapResponse> call = mVspService.getVmap(mApiKey, videoUrl);
-        call.enqueue(new Callback<VmapResponse>() {
-            @Override
-            public void onResponse(Call<VmapResponse> call, Response<VmapResponse> response) {
-                final VmapResponse vmapResponse = response.body();
-                if (vmapResponse != null) {
-                    mContent = vmapResponse.getContent();
-                    try {
-                        final List<AdBreak> adBreaks = VmapParser.parse(mContent);
-                        for (AdBreak adBreak : adBreaks) {
-                            final String timeOffset = adBreak.getTimeOffset();
-                            final String breakType = adBreak.getBreakType();
-                            final String url = adBreak.getAdSource().getAdTagUri().getUrl();
-                            boolean outstream = false;
-                            for (Extension extension : adBreak.getExtensions()) {
-                                if (extension instanceof OutstreamExtension) {
-                                    outstream = true;
-                                }
-                            }
-                            if (breakType.equals(AdBreak.BREAK_TYPE_NONLINEAR)) {
-                                new VastAsyncTask(timeOffset, outstream
-                                        ? NonLinear.TYPE_OUTSTREAM
-                                        : NonLinear.TYPE_INSTREAM).execute(url);
-                            }
-                        }
-                    } catch (IOException|XmlPullParserException e) {
-                        Log.e(TAG, e.getMessage());
-                    }
-                    if (mStarted) {
-                        requestAds();
-                    }
-                }
-            }
-
-            @Override
-            public void onFailure(Call<VmapResponse> call, Throwable t) {
-            }
-        });
+        call.enqueue(mVmapResponseCallback);
     }
 
     public void start() {
@@ -282,13 +266,20 @@ public class AdSdkManager implements
                 Log.d(TAG, event.getAd().toString());
                 closeAd();
                 final double key = event.getAd().getAdPodInfo().getTimeOffset();
-                if (mNonLinears.containsKey(key)) {
+                if (mAdBreaks.containsKey(key)) {
+                    final AdBreak adBreak = mAdBreaks.get(key);
                     final NonLinear nonLinear = mNonLinears.get(key);
-                    if (nonLinear.getType().equals(NonLinear.TYPE_OUTSTREAM)) {
+                    if (nonLinear == null) {
+                        return;
+                    }
+
+                    final boolean isOutstream = adBreak.getExtensions().size() > 0
+                            && adBreak.getExtensions().get(0).getType().equals(Extension.TYPE_OUTSTREAM);
+                    if (isOutstream) {
                         if (mOutstreamView != null) {
-                            mClickThroughUrl = nonLinear.getClickThroughUrl();
-                            mClickTrackingUrl = nonLinear.getClickTrackingUrl();
-                            final String path = nonLinear.getResourceUrl();
+                            mClickThroughUrl = nonLinear.getNonLinearClickThrough();
+                            mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
+                            final String path = nonLinear.getStaticResource();
                             mPicasso.load(path).into(mOutstreamView);
                             mCloseOutstreamView.setVisibility(View.VISIBLE);
                         }
@@ -334,9 +325,9 @@ public class AdSdkManager implements
                     closeLayoutParams.addRule(RelativeLayout.ALIGN_TOP, R.id.ad);
                     mContainerLayout.addView(mCloseView, closeLayoutParams);
 
-                    mClickThroughUrl = nonLinear.getClickThroughUrl();
-                    mClickTrackingUrl = nonLinear.getClickTrackingUrl();
-                    final String path = nonLinear.getResourceUrl();
+                    mClickThroughUrl = nonLinear.getNonLinearClickThrough();
+                    mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
+                    final String path = nonLinear.getStaticResource();
                     mPicasso.load(path).into(mAdView);
                 } else {
                     mAdsManager.start();
@@ -428,5 +419,17 @@ public class AdSdkManager implements
             mapping.put(elements[0], elements[1]);
         }
         return mapping;
+    }
+
+    private double parseTimeOffset(String timeOffset) throws ParseException {
+        final Calendar calendar = Calendar.getInstance(Locale.US);
+        final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
+                "HH:mm:ss.SSS", Locale.US);
+        calendar.setTime(simpleDateFormat.parse(timeOffset));
+        final int hour = calendar.get(Calendar.HOUR_OF_DAY);
+        final int minute = calendar.get(Calendar.MINUTE);
+        final int second = calendar.get(Calendar.SECOND);
+        final int millisecond = calendar.get(Calendar.MILLISECOND);
+        return hour * 3600 + minute * 60 + second + millisecond / 1000.0;
     }
 }
