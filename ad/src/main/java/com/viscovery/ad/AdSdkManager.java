@@ -30,6 +30,7 @@ import com.google.ads.interactivemedia.v3.api.player.VideoProgressUpdate;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.squareup.picasso.Picasso;
+import com.viscovery.ad.api.MockService;
 import com.viscovery.ad.api.VmapResponse;
 import com.viscovery.ad.api.VspService;
 import com.viscovery.ad.vast.NonLinear;
@@ -103,6 +104,7 @@ public class AdSdkManager implements
     private final Context mContext;
     private final AdSdkPlayer mPlayer;
     private final String mApiKey;
+    private final boolean mMock;
     private final ImaSdkFactory mSdkFactory;
     private final AdsLoader mAdsLoader;
     private final AdDisplayContainer mAdDisplayContainer;
@@ -114,6 +116,7 @@ public class AdSdkManager implements
     private final ImageView mInstreamAdView;
     private final ImageView mInstreamCloseView;
     private final VspService mVspService;
+    private final MockService mMockService;
     private final Callback<VmapResponse> mVmapResponseCallback = new Callback<VmapResponse>() {
         @Override
         public void onResponse(Call<VmapResponse> call, Response<VmapResponse> response) {
@@ -166,11 +169,16 @@ public class AdSdkManager implements
 
     private VastService mVastService;
 
+    public AdSdkManager(Context context, ViewGroup container, AdSdkPlayer player, String apiKey) {
+        this(context, container, player, apiKey, false);
+    }
+
     public AdSdkManager(
-            Context context, ViewGroup container, AdSdkPlayer player, String apiKey) {
+            Context context, ViewGroup container, AdSdkPlayer player, String apiKey, boolean mock) {
         mContext = context;
         mPlayer = player;
         mApiKey = apiKey;
+        mMock = mock;
         mSdkFactory = ImaSdkFactory.getInstance();
         mAdsLoader = mSdkFactory.createAdsLoader(context);
         mAdsLoader.addAdErrorListener(this);
@@ -194,11 +202,21 @@ public class AdSdkManager implements
                 .registerTypeAdapter(Vmap.class, new VmapTypeAdapter())
                 .create();
         mPicasso = Picasso.with(context);
-        final Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl("https://vsp.viscovery.com/")
-                .addConverterFactory(GsonConverterFactory.create(gson))
-                .build();
-        mVspService = retrofit.create(VspService.class);
+        if (mMock) {
+            final Retrofit retrofit = new Retrofit.Builder()
+                    .baseUrl("http://www.mocky.io/")
+                    .addConverterFactory(GsonConverterFactory.create(gson))
+                    .build();
+            mVspService = null;
+            mMockService = retrofit.create(MockService.class);
+        } else {
+            final Retrofit retrofit = new Retrofit.Builder()
+                    .baseUrl("https://vsp.viscovery.com/")
+                    .addConverterFactory(GsonConverterFactory.create(gson))
+                    .build();
+            mVspService = retrofit.create(VspService.class);
+            mMockService = null;
+        }
         mVastService = new Retrofit.Builder()
                 .baseUrl("https://vsp.viscovery.com/")
                 .addConverterFactory(SimpleXmlConverterFactory.create())
@@ -222,8 +240,13 @@ public class AdSdkManager implements
             mPlayer.setVideoPath(path);
         }
 
-        final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
-        final Call<VmapResponse> call = mVspService.getVmap(mApiKey, videoUrl);
+        final Call<VmapResponse> call;
+        if (mMock) {
+            call = mMockService.getVmap("http://www.mocky.io/v2/594256ef120000ed04ddc3fb");
+        } else {
+            final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
+            call = mVspService.getVmap(mApiKey, videoUrl);
+        }
         call.enqueue(mVmapResponseCallback);
     }
 

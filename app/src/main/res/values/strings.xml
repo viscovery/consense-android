@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Player</string>
-    <string name="video_url" formatted="false"><![CDATA[http://viscovery-vsp-dev.s3.amazonaws.com/sdkdemo/Videos/Mobile%20App_Demo%20Video%20(540p).mp4]]></string>
+    <string name="video_url" formatted="false"><![CDATA[http://rmcdn.2mdn.net/MotifFiles/html/1248596/android_1330378998288.mp4]]></string>
 </resources>

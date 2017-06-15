@@ -32,7 +32,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         mPlayer.setMediaController(mController);
         mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
-        mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY);
+        mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY, true);
         mAdSdkManager.setOutstreamContainer(outstream);
         mAdSdkManager.setVideoPath(path);
     }
