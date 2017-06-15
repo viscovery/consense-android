@@ -135,6 +135,10 @@ public class MainActivity extends AppCompatActivity {
         mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
         mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY);
+        /*
+         * You can use following code instead to test with mock ads:
+         * mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY, true);
+         */
         mAdSdkManager.setOutstreamContainer(outstream);
         mAdSdkManager.setVideoPath(path);
     }
