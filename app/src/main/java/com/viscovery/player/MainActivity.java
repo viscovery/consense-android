@@ -35,6 +35,9 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY, true);
         mAdSdkManager.setOutstreamContainer(outstream);
         mAdSdkManager.setVideoPath(path);
+
+        final String raw = String.format("android.resource://%s/raw/video", getPackageName());
+        mPlayer.setVideoPath(raw);
     }
 
     @Override
