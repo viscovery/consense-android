@@ -48,7 +48,7 @@
         android:src="@drawable/btn_close"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="@+id/ad"
-        app:layout_constraintRight_toRightOf="@+id/ad"
+        app:layout_constraintLeft_toLeftOf="@+id/ad"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 

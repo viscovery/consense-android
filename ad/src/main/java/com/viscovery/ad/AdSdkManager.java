@@ -11,7 +11,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.RelativeLayout;
 
 import com.google.ads.interactivemedia.v3.api.AdDisplayContainer;
 import com.google.ads.interactivemedia.v3.api.AdsLoader;
@@ -38,11 +37,16 @@ import com.viscovery.ad.vast.Vast;
 import com.viscovery.ad.vast.VastService;
 import com.viscovery.ad.vmap.Extension;
 import com.viscovery.ad.vmap.AdBreak;
+import com.viscovery.ad.vmap.Horizontal;
+import com.viscovery.ad.vmap.Placement;
+import com.viscovery.ad.vmap.Size;
+import com.viscovery.ad.vmap.Vertical;
 import com.viscovery.ad.vmap.Vmap;
 import com.viscovery.ad.vmap.VmapTypeAdapter;
 
 import org.simpleframework.xml.Serializer;
 import org.simpleframework.xml.core.Persister;
+import org.simpleframework.xml.util.Match;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -50,6 +54,8 @@ import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -242,7 +248,7 @@ public class AdSdkManager implements
 
         final Call<VmapResponse> call;
         if (mMock) {
-            call = mMockService.getVmap("http://www.mocky.io/v2/594256ef120000ed04ddc3fb");
+            call = mMockService.getVmap("http://www.mocky.io/v2/593fae381000000f07cd101e");
         } else {
             final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
             call = mVspService.getVmap(mApiKey, videoUrl);
@@ -285,11 +291,7 @@ public class AdSdkManager implements
         final AdEventType type = event.getType();
         Log.d(TAG, type.toString());
         switch (type) {
-            case LOG:
-                Log.d(TAG, event.getAdData().toString());
-                break;
             case LOADED:
-                Log.d(TAG, event.getAd().toString());
                 closeAd();
                 final double key = event.getAd().getAdPodInfo().getTimeOffset();
                 if (mAdBreaks.containsKey(key)) {
@@ -299,9 +301,30 @@ public class AdSdkManager implements
                         return;
                     }
 
-                    final boolean isOutstream = adBreak.getExtensions().size() > 0
-                            && adBreak.getExtensions().get(0).getType().equals(Extension.TYPE_OUTSTREAM);
-                    if (isOutstream) {
+                    Placement placement = null;
+                    Horizontal horizontal = null;
+                    Vertical vertical = null;
+                    Size size = null;
+                    for (Extension extension : adBreak.getExtensions()) {
+                        if (extension.getType().equals(Extension.TYPE_POSITION)) {
+                            for (Object value : extension.getValues()) {
+                                if (value instanceof Placement) {
+                                    placement = (Placement) value;
+                                } else if (value instanceof Horizontal) {
+                                    horizontal = (Horizontal) value;
+                                } else if (value instanceof  Vertical) {
+                                    vertical = (Vertical) value;
+                                }
+                            }
+                        } else if (extension.getType().equals(Extension.TYPE_SIZE)) {
+                            for (Object value : extension.getValues()) {
+                                if (value instanceof Size) {
+                                    size = (Size) value;
+                                }
+                            }
+                        }
+                    }
+                    if (placement != null && placement.getType().equals(Placement.TYPE_OUTSTREAM)) {
                         if (mOutstreamView != null) {
                             mClickThroughUrl = nonLinear.getNonLinearClickThrough();
                             mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
@@ -311,17 +334,25 @@ public class AdSdkManager implements
                         }
                         return;
                     }
-                    final Map<String, String> parameters = parseParameters(
-                            nonLinear.getAdParameters());
 
                     int heightPercentage;
                     try {
-                        heightPercentage = Integer.parseInt(parameters.get("height"));
-                    } catch (NumberFormatException e) {
+                        final Pattern pattern = Pattern.compile("(\\d+)%");
+                        final Matcher matcher = pattern.matcher(size.getValue());
+                        matcher.find();
+                        heightPercentage = Integer.parseInt(matcher.group(1));
+                    } catch (NullPointerException|NumberFormatException e) {
                         heightPercentage = 100;
                     }
-                    final int bottomPercentage = Integer.parseInt(parameters.get("pos_value"));
-
+                    int bottomPercentage;
+                    try {
+                        final Pattern pattern = Pattern.compile("(\\d+)%");
+                        final Matcher matcher = pattern.matcher(vertical.getValue());
+                        matcher.find();
+                        bottomPercentage = Integer.parseInt(matcher.group(1));
+                    } catch (NullPointerException|NumberFormatException e) {
+                        bottomPercentage = 0;
+                    }
 
                     final ConstraintLayout.LayoutParams topLayoutParams =
                             (ConstraintLayout.LayoutParams) mInstreamTopGuideline.getLayoutParams();
@@ -340,19 +371,42 @@ public class AdSdkManager implements
                             (ConstraintLayout.LayoutParams) mInstreamRightGuideline.getLayoutParams();
                     final ConstraintLayout.LayoutParams adLayoutParams =
                             (ConstraintLayout.LayoutParams) mInstreamAdView.getLayoutParams();
-                    if (parameters.get("align").equals("center")) {
+                    if (horizontal == null || horizontal.getType().equals(Horizontal.TYPE_CENTER)) {
                         mInstreamAdView.setScaleType(ImageView.ScaleType.FIT_CENTER);
                         leftLayoutParams.guidePercent = 0;
                         rightLayoutParams.guidePercent = 1;
                         adLayoutParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID;
                         adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID;
-                    } else {
+                    } else if (horizontal.getType().equals(Horizontal.TYPE_LEFT)) {
                         mInstreamAdView.setScaleType(ImageView.ScaleType.FIT_START);
-                        final int leftPercentage = Integer.parseInt(parameters.get("align_value"));
+                        int leftPercentage;
+                        try {
+                            final Pattern pattern = Pattern.compile("(\\d+)%");
+                            final Matcher matcher = pattern.matcher(horizontal.getValue());
+                            matcher.find();
+                            leftPercentage = Integer.parseInt(matcher.group(1));
+                        } catch (NumberFormatException e) {
+                            leftPercentage = 0;
+                        }
                         leftLayoutParams.guidePercent = (float) (leftPercentage / 100.0);
                         rightLayoutParams.guidePercent = 1 - leftLayoutParams.guidePercent;
                         adLayoutParams.leftToLeft = mInstreamLeftGuideline.getId();
                         adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.UNSET;
+                    } else {
+                        mInstreamAdView.setScaleType(ImageView.ScaleType.FIT_END);
+                        int rightPercentage;
+                        try {
+                            final Pattern pattern = Pattern.compile("(\\d+)%");
+                            final Matcher matcher = pattern.matcher(horizontal.getValue());
+                            matcher.find();
+                            rightPercentage = Integer.parseInt(matcher.group(1));
+                        } catch (NumberFormatException e) {
+                            rightPercentage = 0;
+                        }
+                        leftLayoutParams.guidePercent = (float) (rightPercentage / 100.0);
+                        rightLayoutParams.guidePercent = 1 - leftLayoutParams.guidePercent;
+                        adLayoutParams.leftToLeft = ConstraintLayout.LayoutParams.UNSET;
+                        adLayoutParams.rightToRight = mInstreamRightGuideline.getId();
                     }
                     mInstreamLeftGuideline.setLayoutParams(leftLayoutParams);
                     mInstreamRightGuideline.setLayoutParams(rightLayoutParams);
@@ -444,15 +498,6 @@ public class AdSdkManager implements
             mOutstreamView.setImageDrawable(null);
             mCloseOutstreamView.setVisibility(View.GONE);
         }
-    }
-
-    private Map<String, String> parseParameters(String parameters) {
-        HashMap<String, String> mapping = new HashMap<>();
-        for (final String parameter : parameters.split(",")) {
-            final String[] elements = parameter.split("=");
-            mapping.put(elements[0], elements[1]);
-        }
-        return mapping;
     }
 
     private double parseTimeOffset(String timeOffset) throws ParseException {

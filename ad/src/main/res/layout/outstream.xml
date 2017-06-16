@@ -18,7 +18,7 @@
         android:src="@drawable/btn_close"
         android:visibility="gone"
         android:layout_alignTop="@id/outstream"
-        android:layout_alignRight="@id/outstream"
+        android:layout_alignLeft="@id/outstream"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
