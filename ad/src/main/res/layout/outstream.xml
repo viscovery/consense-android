@@ -15,11 +15,13 @@
 
     <ImageView
         android:id="@+id/close"
-        android:src="@drawable/btn_close"
+        android:src="@drawable/ic_close"
+        android:padding="5dp"
+        android:background="#ccffffff"
         android:visibility="gone"
         android:layout_alignTop="@id/outstream"
         android:layout_alignLeft="@id/outstream"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content" />
+        android:layout_width="30dp"
+        android:layout_height="30dp" />
 
 </RelativeLayout>

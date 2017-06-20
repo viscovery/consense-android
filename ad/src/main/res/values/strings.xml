@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">ConSense</string>
+    <string name="app_name">VidSense</string>
+    <string name="remaining">Ad．%1$s</string>
+    <string name="skippable">You can skip ad in %1$ds</string>
+    <string name="skip">Skip Ad</string>
+    <string name="about">Learn More</string>
 </resources>

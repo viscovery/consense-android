@@ -27,8 +27,8 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         final ViewGroup container = (ViewGroup) findViewById(R.id.container);
         final ViewGroup outstream = (ViewGroup) findViewById(R.id.outstream);
         mController = new MediaController(this, false);
-        mController.setAnchorView(container);
         mPlayer = (VideoPlayer) findViewById(R.id.player);
+        mController.setAnchorView(mPlayer);
         mPlayer.setMediaController(mController);
         mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
