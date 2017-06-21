@@ -11,7 +11,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.RelativeLayout;
 
 import com.google.ads.interactivemedia.v3.api.AdDisplayContainer;
 import com.google.ads.interactivemedia.v3.api.AdsLoader;
@@ -245,7 +244,17 @@ public class AdSdkManager implements
             call = mMockService.getVmap("http://www.mocky.io/v2/594256ef120000ed04ddc3fb");
         } else {
             final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
-            call = mVspService.getVmap(mApiKey, videoUrl);
+            call = mVspService.getVmapByUrl(mApiKey, videoUrl);
+        }
+        call.enqueue(mVmapResponseCallback);
+    }
+
+    public void setVideoId(String id) {
+        final Call<VmapResponse> call;
+        if (mMock) {
+            call = mMockService.getVmap("http://www.mocky.io/v2/594256ef120000ed04ddc3fb");
+        } else {
+            call = mVspService.getVmapById(mApiKey, id);
         }
         call.enqueue(mVmapResponseCallback);
     }
