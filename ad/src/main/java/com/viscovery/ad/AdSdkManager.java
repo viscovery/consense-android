@@ -9,6 +9,7 @@ import android.os.Message;
 import android.support.constraint.ConstraintLayout;
 import android.support.constraint.Guideline;
 import android.util.Base64;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -151,6 +152,17 @@ public class AdSdkManager implements
 
         @Override
         public void onFailure(Call<VmapResponse> call, Throwable t) {
+        }
+    };
+    private final Callback<Void> mVastTrackingCallback = new Callback<Void>() {
+        @Override
+        public void onResponse(Call<Void> call, Response<Void> response) {
+            Log.d(TAG, String.format("vast tracking succeeded: %d", response.code()));
+        }
+
+        @Override
+        public void onFailure(Call<Void> call, Throwable t) {
+            Log.e(TAG, String.format("vast tracking failed: %s", t.getMessage()));
         }
     };
     private final Timer mTimer = new Timer();
@@ -389,15 +401,19 @@ public class AdSdkManager implements
                 mInstreamLinearView.resume();
             }
         } else if (v == mInstreamAboutView) {
-            final Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse(mClickThroughUrl));
-            mContext.startActivity(intent);
             mInstreamLinearView.pause();
-        } else if (v == mInstreamNonLinearView || v == mOutstreamNonLinearView) {
+            final Call<Void> call = mVastService.trackEvent(mClickTrackingUrl);
+            call.enqueue(mVastTrackingCallback);
             final Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setData(Uri.parse(mClickThroughUrl));
             mContext.startActivity(intent);
+        } else if (v == mInstreamNonLinearView || v == mOutstreamNonLinearView) {
             closeAds();
+            final Call<Void> call = mVastService.trackEvent(mClickTrackingUrl);
+            call.enqueue(mVastTrackingCallback);
+            final Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(mClickThroughUrl));
+            mContext.startActivity(intent);
         }
     }
 
