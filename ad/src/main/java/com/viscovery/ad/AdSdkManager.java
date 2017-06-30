@@ -46,9 +46,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Locale;
-import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
@@ -349,7 +347,17 @@ public class AdSdkManager implements
             call = mMockService.getVmap("http://www.mocky.io/v2/593fae381000000f07cd101e");
         } else {
             final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
-            call = mVspService.getVmap(mApiKey, videoUrl);
+            call = mVspService.getVmapByUrl(mApiKey, videoUrl);
+        }
+        call.enqueue(mVmapResponseCallback);
+    }
+
+    public void setVideoId(String id) {
+        final Call<VmapResponse> call;
+        if (mMock) {
+            call = mMockService.getVmap("http://www.mocky.io/v2/593fae381000000f07cd101e");
+        } else {
+            call = mVspService.getVmapById(mApiKey, id);
         }
         call.enqueue(mVmapResponseCallback);
     }
