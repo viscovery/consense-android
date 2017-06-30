@@ -111,6 +111,7 @@ public class AdSdkManager implements
     private final boolean mMock;
     private final ViewGroup mInstreamView;
     private final VideoView mInstreamLinearView;
+    private final View mInstreamToggleView;
     private final TextView mInstreamRemainingView;
     private final TextView mInstreamSkipView;
     private final TextView mInstreamAboutView;
@@ -287,6 +288,8 @@ public class AdSdkManager implements
         mInstreamLinearView.setZOrderMediaOverlay(true);
         mInstreamLinearView.setOnCompletionListener(this);
         mInstreamLinearView.setOnClickListener(this);
+        mInstreamToggleView = (View) mInstreamView.findViewById(R.id.toggle);
+        mInstreamToggleView.setOnClickListener(this);
         mInstreamRemainingView = (TextView) mInstreamView.findViewById(R.id.remaining);
         mInstreamSkipView = (TextView) mInstreamView.findViewById(R.id.skip);
         mInstreamAboutView = (TextView) mInstreamView.findViewById(R.id.about);
@@ -396,7 +399,13 @@ public class AdSdkManager implements
 
     @Override
     public void onClick(View v) {
-        if (v == mInstreamSkipView) {
+        if (v == mInstreamToggleView) {
+            if (mInstreamLinearView.isPlaying()) {
+                mInstreamLinearView.pause();
+            } else {
+                mInstreamLinearView.start();
+            }
+        } else if (v == mInstreamSkipView) {
             skipInstreamLinear();
         } else if (v == mInstreamCloseView) {
             closeInstreamNonLinear();
@@ -449,6 +458,7 @@ public class AdSdkManager implements
         }
         mInstreamLinearView.setVideoPath(path);
         mInstreamLinearView.setVisibility(View.VISIBLE);
+        mInstreamToggleView.setVisibility(View.VISIBLE);
         mInstreamRemainingView.setVisibility(View.VISIBLE);
         mInstreamAboutView.setVisibility(View.VISIBLE);
         mInstreamLinearView.start();
@@ -556,6 +566,7 @@ public class AdSdkManager implements
         mSkipOffset = 0;
         mInstreamLinearView.stopPlayback();
         mInstreamLinearView.setVisibility(View.GONE);
+        mInstreamToggleView.setVisibility(View.GONE);
         mInstreamRemainingView.setVisibility(View.GONE);
         mInstreamSkipView.setVisibility(View.GONE);
         mInstreamAboutView.setVisibility(View.GONE);
