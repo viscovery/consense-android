@@ -84,7 +84,7 @@ public class AdSdkManager implements
             final Vast vast = response.body();
             if (vast != null) {
                 try {
-                    final int key = parseTimeOffset(mAdBreak.getTimeOffset(), true);
+                    final int key = parseTimeOffset(mAdBreak.getTimeOffset());
                     final InLine inLine = vast.getAd().getInLine();
                     final Linear linear = inLine.getLinear();
                     if (linear != null) {
@@ -135,7 +135,7 @@ public class AdSdkManager implements
                     final Vmap vmap = serializer.read(Vmap.class, mContent);
                     for (AdBreak adBreak : vmap.getAdBreaks()) {
                         try {
-                            final int key = parseTimeOffset(adBreak.getTimeOffset(), true);
+                            final int key = parseTimeOffset(adBreak.getTimeOffset());
                             mAdBreaks.put(key, adBreak);
                         } catch (ParseException e) {
                             continue;
@@ -426,7 +426,7 @@ public class AdSdkManager implements
         final String offset = linear.getSkipOffset();
         if (offset != null) {
             try {
-                mSkipOffset = parseTimeOffset(offset, false);
+                mSkipOffset = parseTimeOffset(offset);
             } catch (ParseException e) {
             }
         }
@@ -573,11 +573,16 @@ public class AdSdkManager implements
         closeOutstreamNonLinear();
     }
 
-    private int parseTimeOffset(String timeOffset, boolean floating) throws ParseException {
+    private int parseTimeOffset(String timeOffset) throws ParseException {
         final Calendar calendar = Calendar.getInstance(Locale.US);
-        final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
-                floating ? "HH:mm:ss.SSS" : "HH:mm:ss", Locale.US);
-        calendar.setTime(simpleDateFormat.parse(timeOffset));
+        try {
+            final SimpleDateFormat simpleDateFormat =
+                    new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
+            calendar.setTime(simpleDateFormat.parse(timeOffset));
+        } catch (ParseException e) {
+            final SimpleDateFormat simpleDateFormat = new SimpleDateFormat("HH:mm:ss", Locale.US);
+            calendar.setTime(simpleDateFormat.parse(timeOffset));
+        }
         final int hour = calendar.get(Calendar.HOUR_OF_DAY);
         final int minute = calendar.get(Calendar.MINUTE);
         final int second = calendar.get(Calendar.SECOND);
