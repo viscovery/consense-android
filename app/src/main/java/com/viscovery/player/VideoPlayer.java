@@ -43,4 +43,9 @@ public class VideoPlayer extends VideoView implements AdSdkPlayer {
     public int getDuration() {
         return super.getDuration();
     }
+
+    @Override
+    public boolean isPlaying() {
+        return super.isPlaying();
+    }
 }

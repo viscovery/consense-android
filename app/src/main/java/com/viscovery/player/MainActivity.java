@@ -1,8 +1,6 @@
 package com.viscovery.player;
 
 import android.media.MediaPlayer;
-import android.media.MediaPlayer.OnInfoListener;
-import android.media.MediaPlayer.OnPreparedListener;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
@@ -11,7 +9,14 @@ import android.widget.MediaController;
 
 import com.viscovery.ad.AdSdkManager;
 
-public class MainActivity extends AppCompatActivity implements OnInfoListener, OnPreparedListener {
+import java.util.Locale;
+
+public class MainActivity extends AppCompatActivity implements
+        MediaPlayer.OnInfoListener,
+        MediaPlayer.OnPreparedListener,
+        MediaPlayer.OnErrorListener{
+    private static final String TAG = "SamplePlayer";
+    private static final String KEY_CURRENT_POSITION = "currentPosition";
     private static final String API_KEY = "873cbd49-738d-406c-b9bc-e15588567b39";
 
     private VideoPlayer mPlayer;
@@ -32,6 +37,7 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
         mPlayer.setMediaController(mController);
         mPlayer.setOnPreparedListener(this);
         mPlayer.setOnInfoListener(this);
+        mPlayer.setOnErrorListener(this);
         mAdSdkManager = new AdSdkManager(this, container, mPlayer, API_KEY, true);
         mAdSdkManager.setOutstreamContainer(outstream);
         mAdSdkManager.setVideoPath(path);
@@ -44,7 +50,23 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
     protected void onPause() {
         super.onPause();
 
-        mPlayer.pause();
+        mAdSdkManager.pause();
+        getIntent().putExtra(KEY_CURRENT_POSITION, mPlayer.getCurrentPosition());
+    }
+
+    @Override
+    public void onPrepared(MediaPlayer mp) {
+        mPlayer.seekTo(getIntent().getIntExtra(KEY_CURRENT_POSITION, 0));
+        mp.setOnSeekCompleteListener(new MediaPlayer.OnSeekCompleteListener() {
+            @Override
+            public void onSeekComplete(MediaPlayer mp) {
+                if (mAdSdkManager.isActive()) {
+                    mController.hide();
+                } else {
+                    mController.show(0);
+                }
+            }
+        });
     }
 
     @Override
@@ -60,7 +82,9 @@ public class MainActivity extends AppCompatActivity implements OnInfoListener, O
     }
 
     @Override
-    public void onPrepared(MediaPlayer mp) {
-        mController.show(0);
+    public boolean onError(MediaPlayer mp, int what, int extra) {
+        final String message = String.format(
+                Locale.US, "video playback failed: error %d, code %d", what, extra);
+        return true;
     }
 }

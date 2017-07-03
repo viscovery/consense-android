@@ -68,6 +68,7 @@ public class AdSdkManager implements
         void resume();
         int getCurrentPosition();
         int getDuration();
+        boolean isPlaying();
     }
 
     private class VastCallback implements Callback<Vast> {
@@ -140,8 +141,11 @@ public class AdSdkManager implements
                             continue;
                         }
 
-                        final Call<Vast> vastCall = mVastService.getDocument(
-                                adBreak.getAdSource().getAdTagUri().getValue());
+                        final String url = adBreak.getAdSource().getAdTagUri().getValue().replace(
+                                "[timestamp]",
+                                Long.toString(mTimestamp.getTimeInMillis() / 1000)
+                        );
+                        final Call<Vast> vastCall = mVastService.getDocument(url);
                         vastCall.enqueue(new VastCallback(adBreak));
                     }
                 } catch (Exception e) {
@@ -162,13 +166,6 @@ public class AdSdkManager implements
         @Override
         public void onFailure(Call<Void> call, Throwable t) {
             Log.e(TAG, String.format("vast tracking failed: %s", t.getMessage()));
-        }
-    };
-    private final Timer mTimer = new Timer();
-    private final TimerTask mTimerTask = new TimerTask() {
-        @Override
-        public void run() {
-            mPositionHandler.obtainMessage().sendToTarget();
         }
     };
     private final Handler mPositionHandler = new Handler() {
@@ -201,12 +198,17 @@ public class AdSdkManager implements
                 return;
             }
 
+            if (!mPlayer.isPlaying()) {
+                return;
+            }
+
             final int currentPosition = mPlayer.getCurrentPosition();
             final Integer[] keys = mAds.keySet().toArray(new Integer[0]);
             Arrays.sort(keys);
             for (int key : keys) {
                 if ((mLastPosition < key && currentPosition >= key)
                         || (mLastPosition <= key && currentPosition > key)) {
+                    mActiveKey = key;
                     final AdBreak adBreak = mAdBreaks.get(key);
                     final Object ad = mAds.get(key);
                     closeAds();
@@ -254,13 +256,16 @@ public class AdSdkManager implements
         }
     };
 
+    private Calendar mTimestamp = Calendar.getInstance();
     private boolean mStarted;
     private String mContent;
     private boolean mActive;
+    private int mActiveKey = -1;
     private int mSkipOffset;
     private int mLastPosition;
     private HashMap<Integer, AdBreak> mAdBreaks = new HashMap<>();
     private HashMap<Integer, Object> mAds = new HashMap<>();
+    private Timer mTimer = new Timer();
     private String mClickThroughUrl;
     private String mClickTrackingUrl;
     private Picasso mPicasso;
@@ -329,6 +334,10 @@ public class AdSdkManager implements
                 .create(VastService.class);
     }
 
+    public boolean isActive() {
+        return mActive;
+    }
+
     public void setOutstreamContainer(ViewGroup container) {
         final LayoutInflater inflater = LayoutInflater.from(mContext);
         final ViewGroup layout = (ViewGroup) inflater.inflate(R.layout.outstream, null);
@@ -371,13 +380,20 @@ public class AdSdkManager implements
         }
 
         mStarted = true;
-        mTimer.schedule(mTimerTask, 0, 100);
+        final TimerTask timerTask = new TimerTask() {
+            @Override
+            public void run() {
+                mPositionHandler.obtainMessage().sendToTarget();
+            }
+        };
+        mTimer = new Timer();
+        mTimer.schedule(timerTask, 0, 100);
     }
 
     public void pause() {
         if (mActive) {
             mInstreamLinearView.pause();
-            mTimer.cancel();
+            mLastPosition = mInstreamLinearView.getCurrentPosition();
         } else if (mPlayer != null) {
             mPlayer.pause();
         }
@@ -385,8 +401,8 @@ public class AdSdkManager implements
 
     public void resume() {
         if (mActive) {
-            mInstreamLinearView.resume();
-            mTimer.schedule(mTimerTask, 0, 100);
+            mInstreamLinearView.seekTo(mLastPosition);
+            mInstreamLinearView.start();
         } else if (mPlayer != null) {
             mPlayer.resume();
         }
@@ -401,9 +417,9 @@ public class AdSdkManager implements
     public void onClick(View v) {
         if (v == mInstreamToggleView) {
             if (mInstreamLinearView.isPlaying()) {
-                mInstreamLinearView.pause();
+                pause();
             } else {
-                mInstreamLinearView.start();
+                resume();
             }
         } else if (v == mInstreamSkipView) {
             skipInstreamLinear();
@@ -561,7 +577,13 @@ public class AdSdkManager implements
         }
     }
 
+    private void removeActiveAd() {
+        mAds.remove(mActiveKey);
+        mActiveKey = -1;
+    }
+
     private void skipInstreamLinear() {
+        removeActiveAd();
         mActive = false;
         mSkipOffset = 0;
         mInstreamLinearView.stopPlayback();
@@ -577,11 +599,13 @@ public class AdSdkManager implements
     }
 
     private void closeInstreamNonLinear() {
+        removeActiveAd();
         mInstreamNonLinearView.setImageDrawable(null);
         mInstreamCloseView.setVisibility(View.GONE);
     }
 
     private void closeOutstreamNonLinear() {
+        removeActiveAd();
         mOutstreamNonLinearView.setImageDrawable(null);
         mOutstreamCloseView.setVisibility(View.GONE);
     }
