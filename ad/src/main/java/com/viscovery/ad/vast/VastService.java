@@ -7,4 +7,6 @@ import retrofit2.http.Url;
 public interface VastService {
     @GET("")
     Call<Vast> getDocument(@Url String url);
+    @GET("")
+    Call<Void> trackEvent(@Url String url);
 }

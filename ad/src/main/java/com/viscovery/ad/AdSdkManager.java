@@ -2,7 +2,10 @@ package com.viscovery.ad;
 
 import android.content.Context;
 import android.content.Intent;
+import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Message;
 import android.support.constraint.ConstraintLayout;
 import android.support.constraint.Guideline;
 import android.util.Base64;
@@ -11,32 +14,27 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.VideoView;
 
-import com.google.ads.interactivemedia.v3.api.AdDisplayContainer;
-import com.google.ads.interactivemedia.v3.api.AdsLoader;
-import com.google.ads.interactivemedia.v3.api.AdsLoader.AdsLoadedListener;
-import com.google.ads.interactivemedia.v3.api.AdErrorEvent;
-import com.google.ads.interactivemedia.v3.api.AdErrorEvent.AdErrorListener;
-import com.google.ads.interactivemedia.v3.api.AdEvent;
-import com.google.ads.interactivemedia.v3.api.AdEvent.AdEventListener;
-import com.google.ads.interactivemedia.v3.api.AdEvent.AdEventType;
-import com.google.ads.interactivemedia.v3.api.AdsManager;
-import com.google.ads.interactivemedia.v3.api.AdsManagerLoadedEvent;
-import com.google.ads.interactivemedia.v3.api.AdsRequest;
-import com.google.ads.interactivemedia.v3.api.ImaSdkFactory;
-import com.google.ads.interactivemedia.v3.api.player.ContentProgressProvider;
-import com.google.ads.interactivemedia.v3.api.player.VideoProgressUpdate;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.squareup.picasso.Picasso;
 import com.viscovery.ad.api.MockService;
 import com.viscovery.ad.api.VmapResponse;
 import com.viscovery.ad.api.VspService;
+import com.viscovery.ad.vast.InLine;
+import com.viscovery.ad.vast.Linear;
+import com.viscovery.ad.vast.MediaFile;
 import com.viscovery.ad.vast.NonLinear;
 import com.viscovery.ad.vast.Vast;
 import com.viscovery.ad.vast.VastService;
 import com.viscovery.ad.vmap.Extension;
 import com.viscovery.ad.vmap.AdBreak;
+import com.viscovery.ad.vmap.Horizontal;
+import com.viscovery.ad.vmap.Placement;
+import com.viscovery.ad.vmap.Size;
+import com.viscovery.ad.vmap.Vertical;
 import com.viscovery.ad.vmap.Vmap;
 import com.viscovery.ad.vmap.VmapTypeAdapter;
 
@@ -45,10 +43,14 @@ import org.simpleframework.xml.core.Persister;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -58,10 +60,7 @@ import retrofit2.converter.gson.GsonConverterFactory;
 import retrofit2.converter.simplexml.SimpleXmlConverterFactory;
 
 public class AdSdkManager implements
-        AdErrorListener,
-        AdEventListener,
-        AdsLoadedListener,
-        ContentProgressProvider,
+        MediaPlayer.OnCompletionListener,
         View.OnClickListener {
     public interface AdSdkPlayer {
         void setVideoPath(String path);
@@ -69,6 +68,7 @@ public class AdSdkManager implements
         void resume();
         int getCurrentPosition();
         int getDuration();
+        boolean isPlaying();
     }
 
     private class VastCallback implements Callback<Vast> {
@@ -82,13 +82,18 @@ public class AdSdkManager implements
         public void onResponse(Call<Vast> call, Response<Vast> response) {
             final Vast vast = response.body();
             if (vast != null) {
-                final NonLinear nonLinear = vast.getAd().getInLine().getNonLinear();
-                if (nonLinear != null) {
-                    try {
-                        final double key = parseTimeOffset(mAdBreak.getTimeOffset());
-                        mNonLinears.put(key, nonLinear);
-                    } catch (ParseException e) {
+                try {
+                    final int key = parseTimeOffset(mAdBreak.getTimeOffset());
+                    final InLine inLine = vast.getAd().getInLine();
+                    final Linear linear = inLine.getLinear();
+                    if (linear != null) {
+                        mAds.put(key, linear);
                     }
+                    final NonLinear nonLinear = inLine.getNonLinear();
+                    if (nonLinear != null) {
+                        mAds.put(key, nonLinear);
+                    }
+                } catch (ParseException e) {
                 }
             }
         }
@@ -99,20 +104,23 @@ public class AdSdkManager implements
     }
 
     private static final String TAG = "AdSdkManager";
+    private static final int POSITION_CHECK = 0;
 
     private final Context mContext;
     private final AdSdkPlayer mPlayer;
     private final String mApiKey;
     private final boolean mMock;
-    private final ImaSdkFactory mSdkFactory;
-    private final AdsLoader mAdsLoader;
-    private final AdDisplayContainer mAdDisplayContainer;
     private final ViewGroup mInstreamView;
+    private final VideoView mInstreamLinearView;
+    private final View mInstreamToggleView;
+    private final TextView mInstreamRemainingView;
+    private final TextView mInstreamSkipView;
+    private final TextView mInstreamAboutView;
     private final Guideline mInstreamLeftGuideline;
     private final Guideline mInstreamTopGuideline;
     private final Guideline mInstreamRightGuideline;
     private final Guideline mInstreamBottomGuideline;
-    private final ImageView mInstreamAdView;
+    private final ImageView mInstreamNonLinearView;
     private final ImageView mInstreamCloseView;
     private final VspService mVspService;
     private final MockService mMockService;
@@ -127,44 +135,143 @@ public class AdSdkManager implements
                     final Vmap vmap = serializer.read(Vmap.class, mContent);
                     for (AdBreak adBreak : vmap.getAdBreaks()) {
                         try {
-                            final double key = parseTimeOffset(adBreak.getTimeOffset());
+                            final int key = parseTimeOffset(adBreak.getTimeOffset());
                             mAdBreaks.put(key, adBreak);
                         } catch (ParseException e) {
                             continue;
                         }
 
-                        final Call<Vast> vastCall = mVastService.getDocument(
-                                adBreak.getAdSource().getAdTagUri().getValue());
+                        final String url = adBreak.getAdSource().getAdTagUri().getValue().replace(
+                                "[timestamp]",
+                                Long.toString(mTimestamp.getTimeInMillis() / 1000)
+                        );
+                        final Call<Vast> vastCall = mVastService.getDocument(url);
                         vastCall.enqueue(new VastCallback(adBreak));
                     }
                 } catch (Exception e) {
-                }
-
-                if (mStarted) {
-                    requestAds();
                 }
             }
         }
 
         @Override
         public void onFailure(Call<VmapResponse> call, Throwable t) {
-            Log.d(TAG, "onFailure");
-            Log.d(TAG, t.getMessage());
+        }
+    };
+    private final Callback<Void> mVastTrackingCallback = new Callback<Void>() {
+        @Override
+        public void onResponse(Call<Void> call, Response<Void> response) {
+            Log.d(TAG, String.format("vast tracking succeeded: %d", response.code()));
+        }
+
+        @Override
+        public void onFailure(Call<Void> call, Throwable t) {
+            Log.e(TAG, String.format("vast tracking failed: %s", t.getMessage()));
+        }
+    };
+    private final Handler mPositionHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            if (mActive) {
+                final int position = mInstreamLinearView.getCurrentPosition();
+                final int remaining = (mInstreamLinearView.getDuration() - position) / 1000;
+                final String arg =
+                        String.format(Locale.US, "%d:%02d", remaining / 60, remaining % 60);
+                final String text = mContext.getString(R.string.remaining, arg);
+                mInstreamRemainingView.setText(text);
+
+                if (mSkipOffset > 0) {
+                    if (position >= mSkipOffset) {
+                        mInstreamSkipView.setText(R.string.skip);
+                        mInstreamSkipView.setCompoundDrawablesWithIntrinsicBounds(
+                                0, 0, R.drawable.ic_skip, 0);
+                        mInstreamSkipView.setVisibility(View.VISIBLE);
+                        mInstreamSkipView.setOnClickListener(AdSdkManager.this);
+                    } else {
+                        final int skipOffset = (mSkipOffset - position) / 1000;
+                        final String skippable = mContext.getString(R.string.skippable, skipOffset);
+                        mInstreamSkipView.setText(skippable);
+                        mInstreamSkipView.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+                        mInstreamSkipView.setVisibility(View.VISIBLE);
+                        mInstreamSkipView.setOnClickListener(null);
+                    }
+                }
+                return;
+            }
+
+            if (!mPlayer.isPlaying()) {
+                return;
+            }
+
+            final int currentPosition = mPlayer.getCurrentPosition();
+            final Integer[] keys = mAds.keySet().toArray(new Integer[0]);
+            Arrays.sort(keys);
+            for (int key : keys) {
+                if ((mLastPosition < key && currentPosition >= key)
+                        || (mLastPosition <= key && currentPosition > key)) {
+                    mActiveKey = key;
+                    final AdBreak adBreak = mAdBreaks.get(key);
+                    final Object ad = mAds.get(key);
+                    closeAds();
+                    if (ad instanceof Linear) {
+                        showInstreamLinear((Linear) ad);
+                    } else if (ad instanceof NonLinear) {
+                        Placement placement = null;
+                        Horizontal horizontal = null;
+                        Vertical vertical = null;
+                        Size size = null;
+                        for (Extension extension : adBreak.getExtensions()) {
+                            switch (extension.getType()) {
+                                case Extension.TYPE_POSITION:
+                                    for (Object value : extension.getValues()) {
+                                        if (value instanceof Placement) {
+                                            placement = (Placement) value;
+                                        } else if (value instanceof Horizontal) {
+                                            horizontal = (Horizontal) value;
+                                        } else if (value instanceof  Vertical) {
+                                            vertical = (Vertical) value;
+                                        }
+                                    }
+                                    break;
+                                case Extension.TYPE_SIZE:
+                                    for (Object value : extension.getValues()) {
+                                        if (value instanceof Size) {
+                                            size = (Size) value;
+                                        }
+                                    }
+                                    break;
+                            }
+                        }
+                        final NonLinear nonLinear = (NonLinear) ad;
+                        if (placement != null
+                                && placement.getType().equals(Placement.TYPE_OUTSTREAM)) {
+                            showOutstreamNonLinear(nonLinear);
+                        } else {
+                            showInstreamNonLinear(nonLinear, horizontal, vertical, size);
+                        }
+                    }
+                    break;
+                }
+            }
+            mLastPosition = currentPosition;
         }
     };
 
+    private Calendar mTimestamp = Calendar.getInstance();
     private boolean mStarted;
     private String mContent;
-    private AdsManager mAdsManager;
     private boolean mActive;
-    private HashMap<Double, AdBreak> mAdBreaks = new HashMap<>();
-    private HashMap<Double, NonLinear> mNonLinears = new HashMap<>();
+    private int mActiveKey = -1;
+    private int mSkipOffset;
+    private int mLastPosition;
+    private HashMap<Integer, AdBreak> mAdBreaks = new HashMap<>();
+    private HashMap<Integer, Object> mAds = new HashMap<>();
+    private Timer mTimer = new Timer();
     private String mClickThroughUrl;
     private String mClickTrackingUrl;
     private Picasso mPicasso;
 
-    private ImageView mOutstreamView;
-    private ImageView mCloseOutstreamView;
+    private ImageView mOutstreamNonLinearView;
+    private ImageView mOutstreamCloseView;
 
     private VastService mVastService;
 
@@ -178,22 +285,26 @@ public class AdSdkManager implements
         mPlayer = player;
         mApiKey = apiKey;
         mMock = mock;
-        mSdkFactory = ImaSdkFactory.getInstance();
-        mAdsLoader = mSdkFactory.createAdsLoader(context);
-        mAdsLoader.addAdErrorListener(this);
-        mAdsLoader.addAdsLoadedListener(this);
-        mAdDisplayContainer = mSdkFactory.createAdDisplayContainer();
-        mAdDisplayContainer.setAdContainer(container);
 
         final LayoutInflater inflater = LayoutInflater.from(context);
         inflater.inflate(R.layout.instream, container);
         mInstreamView = (ViewGroup) container.findViewById(R.id.instream);
+        mInstreamLinearView = (VideoView) mInstreamView.findViewById(R.id.linear);
+        mInstreamLinearView.setZOrderMediaOverlay(true);
+        mInstreamLinearView.setOnCompletionListener(this);
+        mInstreamLinearView.setOnClickListener(this);
+        mInstreamToggleView = (View) mInstreamView.findViewById(R.id.toggle);
+        mInstreamToggleView.setOnClickListener(this);
+        mInstreamRemainingView = (TextView) mInstreamView.findViewById(R.id.remaining);
+        mInstreamSkipView = (TextView) mInstreamView.findViewById(R.id.skip);
+        mInstreamAboutView = (TextView) mInstreamView.findViewById(R.id.about);
+        mInstreamAboutView.setOnClickListener(this);
         mInstreamLeftGuideline = (Guideline) mInstreamView.findViewById(R.id.left);
         mInstreamTopGuideline = (Guideline) mInstreamView.findViewById(R.id.top);
         mInstreamRightGuideline = (Guideline) mInstreamView.findViewById(R.id.right);
         mInstreamBottomGuideline = (Guideline) mInstreamView.findViewById(R.id.bottom);
-        mInstreamAdView = (ImageView) mInstreamView.findViewById(R.id.ad);
-        mInstreamAdView.setOnClickListener(this);
+        mInstreamNonLinearView = (ImageView) mInstreamView.findViewById(R.id.nonLinear);
+        mInstreamNonLinearView.setOnClickListener(this);
         mInstreamCloseView = (ImageView) mInstreamView.findViewById(R.id.close);
         mInstreamCloseView.setOnClickListener(this);
 
@@ -223,15 +334,19 @@ public class AdSdkManager implements
                 .create(VastService.class);
     }
 
+    public boolean isActive() {
+        return mActive;
+    }
+
     public void setOutstreamContainer(ViewGroup container) {
         final LayoutInflater inflater = LayoutInflater.from(mContext);
         final ViewGroup layout = (ViewGroup) inflater.inflate(R.layout.outstream, null);
         container.addView(layout);
 
-        mOutstreamView = (ImageView) layout.findViewById(R.id.outstream);
-        mOutstreamView.setOnClickListener(this);
-        mCloseOutstreamView = (ImageView) layout.findViewById(R.id.close);
-        mCloseOutstreamView.setOnClickListener(this);
+        mOutstreamNonLinearView = (ImageView) layout.findViewById(R.id.outstream);
+        mOutstreamNonLinearView.setOnClickListener(this);
+        mOutstreamCloseView = (ImageView) layout.findViewById(R.id.close);
+        mOutstreamCloseView.setOnClickListener(this);
     }
 
     public void setVideoPath(String path) {
@@ -241,7 +356,7 @@ public class AdSdkManager implements
 
         final Call<VmapResponse> call;
         if (mMock) {
-            call = mMockService.getVmap("http://www.mocky.io/v2/594256ef120000ed04ddc3fb");
+            call = mMockService.getVmap("http://www.mocky.io/v2/593fae381000000f07cd101e");
         } else {
             final String videoUrl = Base64.encodeToString(path.getBytes(), Base64.DEFAULT);
             call = mVspService.getVmapByUrl(mApiKey, videoUrl);
@@ -252,7 +367,7 @@ public class AdSdkManager implements
     public void setVideoId(String id) {
         final Call<VmapResponse> call;
         if (mMock) {
-            call = mMockService.getVmap("http://www.mocky.io/v2/594256ef120000ed04ddc3fb");
+            call = mMockService.getVmap("http://www.mocky.io/v2/593fae381000000f07cd101e");
         } else {
             call = mVspService.getVmapById(mApiKey, id);
         }
@@ -265,214 +380,256 @@ public class AdSdkManager implements
         }
 
         mStarted = true;
-        requestAds();
+        final TimerTask timerTask = new TimerTask() {
+            @Override
+            public void run() {
+                mPositionHandler.obtainMessage().sendToTarget();
+            }
+        };
+        mTimer = new Timer();
+        mTimer.schedule(timerTask, 0, 100);
     }
 
     public void pause() {
-        if (mAdsManager != null && mActive) {
-            mAdsManager.pause();
+        if (mActive) {
+            mInstreamLinearView.pause();
+            mLastPosition = mInstreamLinearView.getCurrentPosition();
         } else if (mPlayer != null) {
             mPlayer.pause();
         }
     }
 
     public void resume() {
-        if (mAdsManager != null && mActive) {
-            mAdsManager.resume();
+        if (mActive) {
+            mInstreamLinearView.seekTo(mLastPosition);
+            mInstreamLinearView.start();
         } else if (mPlayer != null) {
             mPlayer.resume();
         }
     }
 
     @Override
-    public void onAdError(AdErrorEvent event) {
-        Log.e(TAG, event.getError().getMessage());
-    }
-
-    @Override
-    public void onAdEvent(AdEvent event) {
-        final AdEventType type = event.getType();
-        Log.d(TAG, type.toString());
-        switch (type) {
-            case LOG:
-                Log.d(TAG, event.getAdData().toString());
-                break;
-            case LOADED:
-                Log.d(TAG, event.getAd().toString());
-                closeAd();
-                final double key = event.getAd().getAdPodInfo().getTimeOffset();
-                if (mAdBreaks.containsKey(key)) {
-                    final AdBreak adBreak = mAdBreaks.get(key);
-                    final NonLinear nonLinear = mNonLinears.get(key);
-                    if (nonLinear == null) {
-                        return;
-                    }
-
-                    final boolean isOutstream = adBreak.getExtensions().size() > 0
-                            && adBreak.getExtensions().get(0).getType().equals(Extension.TYPE_OUTSTREAM);
-                    if (isOutstream) {
-                        if (mOutstreamView != null) {
-                            mClickThroughUrl = nonLinear.getNonLinearClickThrough();
-                            mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
-                            final String path = nonLinear.getStaticResource();
-                            mPicasso.load(path).into(mOutstreamView);
-                            mCloseOutstreamView.setVisibility(View.VISIBLE);
-                        }
-                        return;
-                    }
-                    final Map<String, String> parameters = parseParameters(
-                            nonLinear.getAdParameters());
-
-                    int heightPercentage;
-                    try {
-                        heightPercentage = Integer.parseInt(parameters.get("height"));
-                    } catch (NumberFormatException e) {
-                        heightPercentage = 100;
-                    }
-                    final int bottomPercentage = Integer.parseInt(parameters.get("pos_value"));
-
-
-                    final ConstraintLayout.LayoutParams topLayoutParams =
-                            (ConstraintLayout.LayoutParams) mInstreamTopGuideline.getLayoutParams();
-                    topLayoutParams.guidePercent =
-                            (float) ((100 - heightPercentage - bottomPercentage) / 100.0);
-                    mInstreamTopGuideline.setLayoutParams(topLayoutParams);
-
-                    final ConstraintLayout.LayoutParams bottomLayoutParams =
-                            (ConstraintLayout.LayoutParams) mInstreamBottomGuideline.getLayoutParams();
-                    bottomLayoutParams.guidePercent = (float) ((100 - bottomPercentage) / 100.0);
-                    mInstreamBottomGuideline.setLayoutParams(bottomLayoutParams);
-
-                    final ConstraintLayout.LayoutParams leftLayoutParams =
-                            (ConstraintLayout.LayoutParams) mInstreamLeftGuideline.getLayoutParams();
-                    final ConstraintLayout.LayoutParams rightLayoutParams =
-                            (ConstraintLayout.LayoutParams) mInstreamRightGuideline.getLayoutParams();
-                    final ConstraintLayout.LayoutParams adLayoutParams =
-                            (ConstraintLayout.LayoutParams) mInstreamAdView.getLayoutParams();
-                    if (parameters.get("align").equals("center")) {
-                        mInstreamAdView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                        leftLayoutParams.guidePercent = 0;
-                        rightLayoutParams.guidePercent = 1;
-                        adLayoutParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID;
-                        adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID;
-                    } else {
-                        mInstreamAdView.setScaleType(ImageView.ScaleType.FIT_START);
-                        final int leftPercentage = Integer.parseInt(parameters.get("align_value"));
-                        leftLayoutParams.guidePercent = (float) (leftPercentage / 100.0);
-                        rightLayoutParams.guidePercent = 1 - leftLayoutParams.guidePercent;
-                        adLayoutParams.leftToLeft = mInstreamLeftGuideline.getId();
-                        adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.UNSET;
-                    }
-                    mInstreamLeftGuideline.setLayoutParams(leftLayoutParams);
-                    mInstreamRightGuideline.setLayoutParams(rightLayoutParams);
-                    mInstreamAdView.setLayoutParams(adLayoutParams);
-
-                    mClickThroughUrl = nonLinear.getNonLinearClickThrough();
-                    mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
-                    final String path = nonLinear.getStaticResource();
-                    mPicasso.load(path).into(mInstreamAdView);
-                    mInstreamCloseView.setVisibility(View.VISIBLE);
-                } else {
-                    mAdsManager.start();
-                }
-                break;
-            case CONTENT_PAUSE_REQUESTED:
-                if (mPlayer != null) {
-                    mPlayer.pause();
-                }
-                mActive = true;
-                break;
-            case CONTENT_RESUME_REQUESTED:
-                if (mPlayer != null) {
-                    mPlayer.resume();
-                }
-                mActive = false;
-                break;
-            case ALL_ADS_COMPLETED:
-                destroy();
-                break;
-            default:
-                break;
-        }
-    }
-
-    @Override
-    public void onAdsManagerLoaded(AdsManagerLoadedEvent event) {
-        mAdsManager = event.getAdsManager();
-        mAdsManager.addAdErrorListener(this);
-        mAdsManager.addAdEventListener(this);
-        mAdsManager.init();
-    }
-
-    @Override
-    public VideoProgressUpdate getContentProgress() {
-        if (mActive || mPlayer == null) {
-            return VideoProgressUpdate.VIDEO_TIME_NOT_READY;
-        }
-        final int currentPosition = mPlayer.getCurrentPosition();
-        final int duration = mPlayer.getDuration();
-        return new VideoProgressUpdate(currentPosition, duration);
+    public void onCompletion(MediaPlayer mp) {
+        skipInstreamLinear();
     }
 
     @Override
     public void onClick(View v) {
-        if (v == mInstreamAdView || v == mOutstreamView) {
+        if (v == mInstreamToggleView) {
+            if (mInstreamLinearView.isPlaying()) {
+                pause();
+            } else {
+                resume();
+            }
+        } else if (v == mInstreamSkipView) {
+            skipInstreamLinear();
+        } else if (v == mInstreamCloseView) {
+            closeInstreamNonLinear();
+        } else if (v == mOutstreamCloseView) {
+            closeOutstreamNonLinear();
+        } else if (v == mInstreamLinearView) {
+            if (mInstreamLinearView.isPlaying()) {
+                mInstreamLinearView.pause();
+            } else {
+                mInstreamLinearView.resume();
+            }
+        } else if (v == mInstreamAboutView) {
+            mInstreamLinearView.pause();
+            final Call<Void> call = mVastService.trackEvent(mClickTrackingUrl);
+            call.enqueue(mVastTrackingCallback);
             final Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setData(Uri.parse(mClickThroughUrl));
             mContext.startActivity(intent);
-            closeAd();
-        } else if (v == mInstreamCloseView || v == mCloseOutstreamView) {
-            closeAd();
+        } else if (v == mInstreamNonLinearView || v == mOutstreamNonLinearView) {
+            closeAds();
+            final Call<Void> call = mVastService.trackEvent(mClickTrackingUrl);
+            call.enqueue(mVastTrackingCallback);
+            final Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(mClickThroughUrl));
+            mContext.startActivity(intent);
         }
     }
 
-    private void destroy() {
-        if (mAdsManager != null) {
-            mAdsManager.destroy();
-            mAdsManager = null;
+    private void showInstreamLinear(Linear linear) {
+        mActive = true;
+        if (mPlayer != null) {
+            mPlayer.pause();
+        }
+
+        final String offset = linear.getSkipOffset();
+        if (offset != null) {
+            try {
+                mSkipOffset = parseTimeOffset(offset);
+            } catch (ParseException e) {
+            }
+        }
+
+        int width = 0;
+        String path = null;
+        for (MediaFile file : linear.getMediaFiles()) {
+            if (file.getWidth() > width) {
+                width = file.getWidth();
+                path = file.getValue();
+            }
+        }
+        mInstreamLinearView.setVideoPath(path);
+        mInstreamLinearView.setVisibility(View.VISIBLE);
+        mInstreamToggleView.setVisibility(View.VISIBLE);
+        mInstreamRemainingView.setVisibility(View.VISIBLE);
+        mInstreamAboutView.setVisibility(View.VISIBLE);
+        mInstreamLinearView.start();
+        mClickThroughUrl = linear.getClickThrough();
+        mClickTrackingUrl = linear.getClickTracking();
+    }
+
+    private void showInstreamNonLinear(
+            NonLinear nonLinear, Horizontal horizontal, Vertical vertical, Size size) {
+        int heightPercentage;
+        try {
+            final Pattern pattern = Pattern.compile("(\\d+)%");
+            final Matcher matcher = pattern.matcher(size.getValue());
+            matcher.find();
+            heightPercentage = Integer.parseInt(matcher.group(1));
+        } catch (NullPointerException|NumberFormatException e) {
+            heightPercentage = 100;
+        }
+        int bottomPercentage;
+        try {
+            final Pattern pattern = Pattern.compile("(\\d+)%");
+            final Matcher matcher = pattern.matcher(vertical.getValue());
+            matcher.find();
+            bottomPercentage = Integer.parseInt(matcher.group(1));
+        } catch (NullPointerException|NumberFormatException e) {
+            bottomPercentage = 0;
+        }
+
+        final ConstraintLayout.LayoutParams topLayoutParams =
+                (ConstraintLayout.LayoutParams) mInstreamTopGuideline.getLayoutParams();
+        topLayoutParams.guidePercent =
+                (float) ((100 - heightPercentage - bottomPercentage) / 100.0);
+        mInstreamTopGuideline.setLayoutParams(topLayoutParams);
+
+        final ConstraintLayout.LayoutParams bottomLayoutParams =
+                (ConstraintLayout.LayoutParams) mInstreamBottomGuideline.getLayoutParams();
+        bottomLayoutParams.guidePercent = (float) ((100 - bottomPercentage) / 100.0);
+        mInstreamBottomGuideline.setLayoutParams(bottomLayoutParams);
+
+        final ConstraintLayout.LayoutParams leftLayoutParams =
+                (ConstraintLayout.LayoutParams) mInstreamLeftGuideline.getLayoutParams();
+        final ConstraintLayout.LayoutParams rightLayoutParams =
+                (ConstraintLayout.LayoutParams) mInstreamRightGuideline.getLayoutParams();
+        final ConstraintLayout.LayoutParams adLayoutParams =
+                (ConstraintLayout.LayoutParams) mInstreamNonLinearView.getLayoutParams();
+        if (horizontal == null || horizontal.getType().equals(Horizontal.TYPE_CENTER)) {
+            mInstreamNonLinearView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            leftLayoutParams.guidePercent = 0;
+            rightLayoutParams.guidePercent = 1;
+            adLayoutParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID;
+            adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID;
+        } else if (horizontal.getType().equals(Horizontal.TYPE_LEFT)) {
+            mInstreamNonLinearView.setScaleType(ImageView.ScaleType.FIT_START);
+            int leftPercentage;
+            try {
+                final Pattern pattern = Pattern.compile("(\\d+)%");
+                final Matcher matcher = pattern.matcher(horizontal.getValue());
+                matcher.find();
+                leftPercentage = Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException e) {
+                leftPercentage = 0;
+            }
+            leftLayoutParams.guidePercent = (float) (leftPercentage / 100.0);
+            rightLayoutParams.guidePercent = 1 - leftLayoutParams.guidePercent;
+            adLayoutParams.leftToLeft = mInstreamLeftGuideline.getId();
+            adLayoutParams.rightToRight = ConstraintLayout.LayoutParams.UNSET;
+        } else {
+            mInstreamNonLinearView.setScaleType(ImageView.ScaleType.FIT_END);
+            int rightPercentage;
+            try {
+                final Pattern pattern = Pattern.compile("(\\d+)%");
+                final Matcher matcher = pattern.matcher(horizontal.getValue());
+                matcher.find();
+                rightPercentage = Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException e) {
+                rightPercentage = 0;
+            }
+            leftLayoutParams.guidePercent = (float) (rightPercentage / 100.0);
+            rightLayoutParams.guidePercent = 1 - leftLayoutParams.guidePercent;
+            adLayoutParams.leftToLeft = ConstraintLayout.LayoutParams.UNSET;
+            adLayoutParams.rightToRight = mInstreamRightGuideline.getId();
+        }
+        mInstreamLeftGuideline.setLayoutParams(leftLayoutParams);
+        mInstreamRightGuideline.setLayoutParams(rightLayoutParams);
+        mInstreamNonLinearView.setLayoutParams(adLayoutParams);
+
+        mClickThroughUrl = nonLinear.getNonLinearClickThrough();
+        mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
+        final String path = nonLinear.getStaticResource();
+        mPicasso.load(path).into(mInstreamNonLinearView);
+        mInstreamCloseView.setVisibility(View.VISIBLE);
+    }
+
+    private void showOutstreamNonLinear(NonLinear nonLinear) {
+        if (mOutstreamNonLinearView != null) {
+            mPicasso.load(nonLinear.getStaticResource()).into(mOutstreamNonLinearView);
+            mOutstreamCloseView.setVisibility(View.VISIBLE);
+            mClickThroughUrl = nonLinear.getNonLinearClickThrough();
+            mClickTrackingUrl = nonLinear.getNonLinearClickTracking();
         }
     }
 
-    private void requestAds() {
-        if (mContent == null) {
-            return;
-        }
-
-        destroy();
-        final AdsRequest request = mSdkFactory.createAdsRequest();
-        request.setAdsResponse(mContent);
-        request.setAdDisplayContainer(mAdDisplayContainer);
-        request.setContentProgressProvider(this);
-        mAdsLoader.requestAds(request);
+    private void removeActiveAd() {
+        mAds.remove(mActiveKey);
+        mActiveKey = -1;
     }
 
-    private void closeAd() {
-        mInstreamAdView.setImageDrawable(null);
+    private void skipInstreamLinear() {
+        removeActiveAd();
+        mActive = false;
+        mSkipOffset = 0;
+        mInstreamLinearView.stopPlayback();
+        mInstreamLinearView.setVisibility(View.GONE);
+        mInstreamToggleView.setVisibility(View.GONE);
+        mInstreamRemainingView.setVisibility(View.GONE);
+        mInstreamSkipView.setVisibility(View.GONE);
+        mInstreamAboutView.setVisibility(View.GONE);
+
+        if (mPlayer != null) {
+            mPlayer.resume();
+        }
+    }
+
+    private void closeInstreamNonLinear() {
+        removeActiveAd();
+        mInstreamNonLinearView.setImageDrawable(null);
         mInstreamCloseView.setVisibility(View.GONE);
-        if (mOutstreamView != null) {
-            mOutstreamView.setImageDrawable(null);
-            mCloseOutstreamView.setVisibility(View.GONE);
-        }
     }
 
-    private Map<String, String> parseParameters(String parameters) {
-        HashMap<String, String> mapping = new HashMap<>();
-        for (final String parameter : parameters.split(",")) {
-            final String[] elements = parameter.split("=");
-            mapping.put(elements[0], elements[1]);
-        }
-        return mapping;
+    private void closeOutstreamNonLinear() {
+        removeActiveAd();
+        mOutstreamNonLinearView.setImageDrawable(null);
+        mOutstreamCloseView.setVisibility(View.GONE);
     }
 
-    private double parseTimeOffset(String timeOffset) throws ParseException {
+    private void closeAds() {
+        skipInstreamLinear();
+        closeInstreamNonLinear();
+        closeOutstreamNonLinear();
+    }
+
+    private int parseTimeOffset(String timeOffset) throws ParseException {
         final Calendar calendar = Calendar.getInstance(Locale.US);
-        final SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
-                "HH:mm:ss.SSS", Locale.US);
-        calendar.setTime(simpleDateFormat.parse(timeOffset));
+        try {
+            final SimpleDateFormat simpleDateFormat =
+                    new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
+            calendar.setTime(simpleDateFormat.parse(timeOffset));
+        } catch (ParseException e) {
+            final SimpleDateFormat simpleDateFormat = new SimpleDateFormat("HH:mm:ss", Locale.US);
+            calendar.setTime(simpleDateFormat.parse(timeOffset));
+        }
         final int hour = calendar.get(Calendar.HOUR_OF_DAY);
         final int minute = calendar.get(Calendar.MINUTE);
         final int second = calendar.get(Calendar.SECOND);
         final int millisecond = calendar.get(Calendar.MILLISECOND);
-        return hour * 3600 + minute * 60 + second + millisecond / 1000.0;
+        return hour * 3600000 + minute * 60000 + second * 1000 + millisecond;
     }
 }

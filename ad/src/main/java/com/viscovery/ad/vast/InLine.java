@@ -16,8 +16,12 @@ public class InLine {
     private String mError;
     @Element(name = "Impression")
     private String mImpression;
+
+    @Path("Creatives/Creative")
+    @Element(name = "Linear", required = false)
+    private Linear mLinear;
     @Path("Creatives/Creative/NonLinearAds")
-    @Element(name = "NonLinear")
+    @Element(name = "NonLinear", required = false)
     private NonLinear mNonLinear;
 
     public String getAdSystem() {
@@ -38,6 +42,10 @@ public class InLine {
 
     public String getImpression() {
         return mImpression;
+    }
+
+    public Linear getLinear() {
+        return mLinear;
     }
 
     public NonLinear getNonLinear() {
